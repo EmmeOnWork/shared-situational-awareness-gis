@@ -6,8 +6,13 @@ dashboard data-source. It shares the Janus monolith's Supabase database but is a
 `../docs/adr/0001-shared-database.md`). Monolith conventions are mirrored by
 copying, not importing.
 
-This repo is the walking skeleton (task 01): a `/health` endpoint, CORS, and
-OpenAPI docs. Auth and database access arrive in later slices.
+This repo is the walking skeleton (task 01): a `/health` endpoint and OpenAPI
+docs. Auth and database access arrive in later slices.
+
+> Note: this service carries **no CORS**. The
+> [edge gateway](../docs/adr/0002-edge-gateway-single-front-door.md) fronts it
+> same-origin, so the browser never calls it directly and it is not
+> browser-facing — "Widget services carry no CORS" is the standing pattern.
 
 ## Run locally
 

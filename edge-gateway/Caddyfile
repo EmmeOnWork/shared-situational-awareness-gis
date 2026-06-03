@@ -1,0 +1,52 @@
+# Edge gateway — the single routing file (ADR-0002).
+#
+# One origin in front of the whole stack. Explicit widget prefixes route to
+# their services; everything the gateway does is reverse-proxying — no business
+# logic lives here. The site address and the upstream addresses are injected per
+# environment via Caddy env substitution ({$VAR}), so this same file runs
+# unchanged whether an upstream is a local port, a compose service name, or a
+# staging/prod internal host.
+#
+# Routing is longest-prefix-match with a catch-all default: explicit widget
+# prefixes are matched first, the Next frontend serves the site root (/), and the
+# monolith backend is the final catch-all. Registering a new widget is one line —
+# add its prefix route above the catch-all.
+
+{
+	admin off
+}
+
+# The injected site address IS the per-environment TLS toggle (ADR-0002, Module 2).
+# A port-only / http:// address — e.g. :8080 locally — serves plain HTTP, so local
+# iteration has no certificate friction. A hostname — e.g. gateway.example.edu in
+# staging/prod — makes Caddy provision and serve automatic HTTPS, and realtime
+# rides it as WSS for free. Same file, same routing logic; only this one injected
+# value differs across local → staging → prod.
+{$GATEWAY_SITE_ADDRESS} {
+	# /demographics → demographic-service. Path is preserved (the service mounts
+	# its routes under /demographics), and the upstream is never hard-coded.
+	reverse_proxy /demographics* {$DEMOGRAPHIC_UPSTREAM}
+
+	# Registering a Widget is THIS — one route line above the catch-all, claiming
+	# a fresh top-level prefix. /geo-layers is the worked example: a new
+	# layers-style service. Strangling a route off the monolith is the same
+	# one-line move in reverse — re-point an entry's upstream.
+	#
+	# Standing rule: a new Widget MUST claim a fresh top-level prefix and MUST NOT
+	# reuse a prefix the monolith already owns — /auth, /dashboards, /layers,
+	# /areas, /pollution, /weather, /euklid, /pois, /reviews, /situation,
+	# /data-upload. (A new layers service picks /geo-layers, not /layers.) Reusing
+	# one would shadow the monolith's catch-all route for that path and break it.
+	reverse_proxy /geo-layers* {$GEO_LAYERS_UPSTREAM}
+
+	# / → the Next frontend (the monolith frontend, served behind the gateway,
+	# unchanged). Exact-path matcher: only the site root resolves here, so unknown
+	# prefixes still fall through to the monolith catch-all below.
+	reverse_proxy / {$FRONTEND_UPSTREAM}
+
+	# Catch-all (no matcher, written last): everything without an explicit widget
+	# prefix above falls through to the monolith backend. This is what lets the
+	# monolith add routes with zero gateway changes — the gateway respects the same
+	# "don't touch me as I evolve" contract the monolith does.
+	reverse_proxy {$MONOLITH_UPSTREAM}
+}

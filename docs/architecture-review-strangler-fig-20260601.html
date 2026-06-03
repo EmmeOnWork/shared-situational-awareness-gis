@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Architecture review — Microservice_PRAIM (Strangler Fig)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 6 5; }
+      .leak { stroke: #dc2626; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      .copy { background-image: repeating-linear-gradient(45deg, #fef3c7, #fef3c7 8px, #fde68a 8px, #fde68a 16px); }
+      .label { letter-spacing: .12em; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-14">
+
+      <!-- ===================== HEADER ===================== -->
+      <header class="space-y-5">
+        <p class="text-xs uppercase tracking-widest text-slate-500">Architecture review · Strangler Fig</p>
+        <h1 class="text-4xl font-serif font-semibold tracking-tight">Microservice_PRAIM</h1>
+        <p class="text-slate-600 max-w-3xl text-sm leading-relaxed">
+          The Janus monolith (<span class="font-mono text-xs">monastero-janus-backend</span> / <span class="font-mono text-xs">-frontend</span>) stays untouched — code, not data.
+          New widgets ship as independent deployables that read the shared schema and verify monolith-issued JWTs.
+          These candidates ask one question: <em>where is the seam that lets a new widget strangle the monolith without anyone editing the monolith?</em>
+        </p>
+        <div class="flex flex-wrap gap-4 text-xs text-slate-600 pt-2 border-t border-slate-200">
+          <span class="flex items-center gap-2"><span class="inline-block w-6 h-4 border-2 border-slate-700"></span> module</span>
+          <span class="flex items-center gap-2"><svg width="28" height="8"><line x1="0" y1="4" x2="28" y2="4" stroke="#475569" stroke-width="2" class="seam"/></svg> seam</span>
+          <span class="flex items-center gap-2"><svg width="28" height="8"><line x1="0" y1="4" x2="28" y2="4" stroke="#dc2626" stroke-width="2"/></svg> leakage</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-6 h-4 deep"></span> deep module</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-6 h-4 copy border border-amber-400"></span> copied implementation</span>
+        </div>
+      </header>
+
+      <section id="candidates" class="space-y-12">
+
+        <!-- ===================== CANDIDATE 1 ===================== -->
+        <article id="c1" class="rounded-xl border border-emerald-300 bg-white shadow-sm overflow-hidden">
+          <div class="px-7 pt-7 pb-4">
+            <div class="flex items-center gap-3 flex-wrap mb-3">
+              <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-600 text-white">Resolved</span>
+              <a href="adr/0002-edge-gateway-single-front-door.md" class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 underline decoration-slate-400">ADR-0002</a>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">edge gateway</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">Caddy · same-origin</span>
+            </div>
+            <h2 class="text-2xl font-serif font-semibold">Give the Strangler Fig a seam: the edge gateway</h2>
+            <p class="text-sm text-slate-600 mt-2">
+              Resolved in a grilling session (2026-06-02) and recorded as
+              <a href="adr/0002-edge-gateway-single-front-door.md" class="underline decoration-slate-400">ADR-0002</a>.
+              The decision below supersedes this candidate's original framing — including its name
+              (it fronts the whole monolith and the frontend, not just widgets).
+            </p>
+          </div>
+
+          <!-- before / after -->
+          <div class="grid md:grid-cols-2 gap-px bg-slate-200 border-y border-slate-200">
+            <div class="bg-white p-5">
+              <p class="text-xs uppercase label text-slate-400 mb-3">Anticipated leak — not the current state</p>
+              <pre class="mermaid">
+flowchart TD
+  FE["Janus frontend<br/>single-origin assumption"]
+  CFG["dashboard config JSON<br/>(absolute URLs sprinkled in)"]
+  MONO["Janus monolith"]
+  DEMO["demographic-service"]
+  FUT["future widget svc?"]
+  FE --> CFG
+  FE -->|"NEXT_PUBLIC_BACKEND_URL"| MONO
+  CFG -.->|"http://demo:28001 hard-coded"| DEMO
+  CFG -.->|"???"| FUT
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#dc2626;
+  class CFG,DEMO,FUT leak
+              </pre>
+              <p class="text-xs text-slate-500 mt-3">Hypothetical: today the frontend references the service <em>nowhere</em>. This is what <em>would</em> happen if each widget's host were pasted into a dashboard blob — the leak the gateway prevents, not one it cleans up.</p>
+            </div>
+            <div class="bg-white p-5">
+              <p class="text-xs uppercase label text-slate-400 mb-3">After — one seam owns the routing map</p>
+              <pre class="mermaid">
+flowchart TD
+  FE["Janus frontend<br/>still one origin"]
+  GW["edge-gateway (Caddy)<br/>one origin · TLS · same-origin"]
+  MONO["Janus monolith<br/>untouched"]
+  DEMO["demographic-service"]
+  FUT["next widget svc<br/>(just register)"]
+  FE -->|"one base URL"| GW
+  GW -->|"catch-all &rarr; monolith"| MONO
+  GW -->|"/demographics"| DEMO
+  GW -->|"/xyz"| FUT
+  classDef deep fill:#0f172a,stroke:#0f172a,color:#fff;
+  class GW deep
+              </pre>
+              <p class="text-xs text-slate-500 mt-3">The gateway is the strangling seam. Migrate a route monolith&rarr;service by re-pointing one entry.</p>
+            </div>
+          </div>
+
+          <div class="px-7 py-6 grid md:grid-cols-2 gap-8">
+            <div>
+              <p class="text-xs uppercase label text-slate-400 mb-2">Decision (see ADR-0002)</p>
+              <ul class="text-sm text-slate-700 space-y-1.5">
+                <li>✦ a dumb reverse proxy (<span class="font-mono text-xs">Caddy</span>), <em>not</em> a BFF — no business logic</li>
+                <li>✦ its own top-level deployable, outside both monolith repos</li>
+                <li>✦ single front door, uniform same-origin across local/staging/prod</li>
+                <li>✦ longest-prefix routing; unknown prefixes <span class="font-mono text-xs">catch-all &rarr; monolith</span></li>
+                <li>✦ one fresh prefix per widget; no reuse of a monolith prefix</li>
+                <li>✦ services become non-browser-facing &rarr; drop CORS entirely</li>
+                <li>✦ realtime (WS/SSE) rides <em>through</em> the gateway, JWT-verified by each service — not Supabase direct</li>
+                <li>✦ gateway terminates TLS in staging/prod</li>
+              </ul>
+            </div>
+            <div>
+              <p class="text-xs uppercase label text-slate-400 mb-2">Corrections to the original framing</p>
+              <ul class="text-sm text-slate-700 space-y-1.5">
+                <li>✦ the "Before" leak was <strong>hypothetical</strong> — the service is referenced nowhere in the frontend; the gateway <em>prevents</em> the leak, it doesn't clean one up</li>
+                <li>✦ G3's fix ("tighten the service's CORS to the gateway's origin") was <strong>wrong</strong> — CORS doesn't govern server-to-server calls; services drop CORS instead</li>
+                <li>✦ "Widget Gateway" was a <strong>misnomer</strong> — it fronts the frontend, the whole monolith, and TLS; renamed <span class="font-mono text-xs">edge-gateway</span></li>
+              </ul>
+            </div>
+          </div>
+        </article>
+
+        <!-- ===================== CANDIDATE 2 ===================== -->
+        <article id="c2" class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="px-7 pt-7 pb-4">
+            <div class="flex items-center gap-3 flex-wrap mb-3">
+              <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">Strong</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">in-process</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">deduplicate</span>
+            </div>
+            <h2 class="text-2xl font-serif font-semibold">Collapse the copied contract into a Widget Service Kit</h2>
+            <p class="font-mono text-xs text-slate-500 mt-2">
+              demographic-service: models/pyd_models.py:6 · security/jwt_utils.py:17 · security/auth_dependencies.py:74 · config/pgsql_config.py:41
+            </p>
+          </div>
+
+          <!-- mass diagram: interface vs implementation -->
+          <div class="grid md:grid-cols-2 gap-px bg-slate-200 border-y border-slate-200">
+            <div class="bg-white p-5">
+              <p class="text-xs uppercase label text-slate-400 mb-4">Before — every service re-copies the same four things</p>
+              <div class="flex items-end justify-center gap-4 h-[300px]">
+                <!-- demographic service stack -->
+                <div class="flex flex-col items-center">
+                  <div class="w-28 copy border border-amber-400 flex items-center justify-center text-[10px] text-center px-1 h-44">DataResponse · verify_token · require_scopes · get_session</div>
+                  <div class="w-28 bg-slate-700 text-white text-[10px] flex items-center justify-center h-16">demographic logic</div>
+                  <p class="text-[10px] uppercase label text-slate-500 mt-2">demographic-svc</p>
+                </div>
+                <!-- next service stack -->
+                <div class="flex flex-col items-center opacity-70">
+                  <div class="w-28 copy border border-amber-400 flex items-center justify-center text-[10px] text-center px-1 h-44">DataResponse · verify_token · require_scopes · get_session</div>
+                  <div class="w-28 bg-slate-700 text-white text-[10px] flex items-center justify-center h-16">next widget</div>
+                  <p class="text-[10px] uppercase label text-slate-500 mt-2">next-svc</p>
+                </div>
+              </div>
+              <p class="text-xs text-slate-500 mt-3">Copied plumbing is as tall as the real work. JWT contract drift has no single home.</p>
+            </div>
+            <div class="bg-white p-5">
+              <p class="text-xs uppercase label text-slate-400 mb-4">After — one deep kit, thin services</p>
+              <div class="flex items-end justify-center gap-4 h-[300px]">
+                <div class="flex flex-col items-center">
+                  <div class="w-24 bg-slate-200 border border-slate-300 text-[10px] flex items-center justify-center h-8">import kit</div>
+                  <div class="w-24 bg-slate-700 text-white text-[10px] flex items-center justify-center h-24">demographic logic</div>
+                  <p class="text-[10px] uppercase label text-slate-500 mt-2">demographic-svc</p>
+                </div>
+                <div class="flex flex-col items-center opacity-70">
+                  <div class="w-24 bg-slate-200 border border-slate-300 text-[10px] flex items-center justify-center h-8">import kit</div>
+                  <div class="w-24 bg-slate-700 text-white text-[10px] flex items-center justify-center h-24">next widget</div>
+                  <p class="text-[10px] uppercase label text-slate-500 mt-2">next-svc</p>
+                </div>
+                <div class="flex flex-col items-center">
+                  <div class="w-28 deep text-white text-[10px] text-center flex items-center justify-center px-2 h-56">praim-widget-kit<br/><span class="opacity-60">contract · auth · session</span></div>
+                  <p class="text-[10px] uppercase label text-slate-500 mt-2">shared kit (deep)</p>
+                </div>
+              </div>
+              <p class="text-xs text-slate-500 mt-3">Interface shrinks to one import; implementation absorbs RSA, scope-parsing, pool config.</p>
+            </div>
+          </div>
+
+          <div class="px-7 py-6 grid md:grid-cols-2 gap-8">
+            <div class="space-y-4">
+              <div>
+                <p class="text-xs uppercase label text-slate-400 mb-1">Problem</p>
+                <p class="text-sm text-slate-700">Every new widget service copies <span class="font-mono text-xs">DataResponse</span>, <span class="font-mono text-xs">verify_access_token</span>, <span class="font-mono text-xs">require_scopes</span> and the <span class="font-mono text-xs">search_path</span> session — shallow duplication with no locality for the JWT contract.</p>
+              </div>
+              <div>
+                <p class="text-xs uppercase label text-slate-400 mb-1">Solution</p>
+                <p class="text-sm text-slate-700">A deep <span class="font-mono text-xs">praim-widget-kit</span> package: one import yields the response contract, the auth dependency, and the DB session seam.</p>
+              </div>
+            </div>
+            <div>
+              <p class="text-xs uppercase label text-slate-400 mb-2">Wins</p>
+              <ul class="text-sm text-slate-700 space-y-1.5">
+                <li>✦ locality: JWT &amp; scope logic in one module</li>
+                <li>✦ leverage: one import, N services</li>
+                <li>✦ interface shrinks; implementation absorbs the plumbing</li>
+                <li>✦ next widget starts thin</li>
+                <li>✦ the kit is the test surface for auth</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="mx-7 mb-7 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900">
+            <span class="font-semibold">Touches ADR-0001 — but compatible.</span> The ADR says <span class="font-mono text-xs">DataResponse</span> is <em>copied, not imported</em> to avoid depending on the monolith. The kit is a <em>third</em> package both new services depend on — not the monolith — so the ADR's intent holds. It does revisit the copy-paste choice across the <em>new</em> services; worth a one-line ADR amendment.
+          </div>
+        </article>
+
+        <!-- ===================== CANDIDATE 3 ===================== -->
+        <article id="c3" class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="px-7 pt-7 pb-4">
+            <div class="flex items-center gap-3 flex-wrap mb-3">
+              <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">Worth exploring</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">local-substitutable</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">contract test</span>
+            </div>
+            <h2 class="text-2xl font-serif font-semibold">Give ADR-0001's "schema is a contract" an actual seam</h2>
+            <p class="font-mono text-xs text-slate-500 mt-2">
+              demographic-service: routers/demographics/demographics_router.py:108-141 (inline SQL) · docs/adr/0001-shared-database.md
+            </p>
+          </div>
+
+          <!-- cross-section -->
+          <div class="grid md:grid-cols-2 gap-px bg-slate-200 border-y border-slate-200">
+            <div class="bg-white p-5">
+              <p class="text-xs uppercase label text-slate-400 mb-4">Before — handlers know column names</p>
+              <div class="space-y-2 h-[260px] flex flex-col justify-center">
+                <div class="h-12 border-l-4 border-slate-400 bg-slate-50 flex items-center px-3 text-xs">HTTP route /raw</div>
+                <div class="h-12 border-l-4 border-red-400 bg-red-50 flex items-center px-3 text-xs font-mono">SELECT * FROM demographic WHERE…</div>
+                <div class="h-12 border-l-4 border-red-400 bg-red-50 flex items-center px-3 text-xs">knows table + columns + search_path</div>
+                <div class="h-12 border-l-4 border-slate-400 bg-slate-50 flex items-center px-3 text-xs">build_demographic_response()</div>
+              </div>
+              <p class="text-xs text-slate-500 mt-3">A monolith column rename breaks the route with no compile-time signal — exactly ADR-0001's warning, with nowhere to localize it.</p>
+            </div>
+            <div class="bg-white p-5">
+              <p class="text-xs uppercase label text-slate-400 mb-4">After — one module embodies the schema contract</p>
+              <div class="space-y-2 h-[260px] flex flex-col justify-center">
+                <div class="h-12 border-l-4 border-slate-400 bg-slate-50 flex items-center px-3 text-xs">HTTP route /raw</div>
+                <div class="h-28 border-l-4 border-slate-900 deep text-white flex flex-col justify-center px-3 text-xs">
+                  <span class="font-semibold">DemographicRepo</span>
+                  <span class="opacity-70">fetch_territory(name) &rarr; row</span>
+                  <span class="opacity-70 text-[10px]">sole owner of table/column/search_path knowledge</span>
+                </div>
+                <div class="h-12 border-l-4 border-slate-400 bg-slate-50 flex items-center px-3 text-xs">build_demographic_response()</div>
+              </div>
+              <p class="text-xs text-slate-500 mt-3">The repo interface <em>is</em> the schema contract — and the home for the missing integration / contract test.</p>
+            </div>
+          </div>
+
+          <div class="px-7 py-6 grid md:grid-cols-2 gap-8">
+            <div class="space-y-4">
+              <div>
+                <p class="text-xs uppercase label text-slate-400 mb-1">Problem</p>
+                <p class="text-sm text-slate-700">ADR-0001 says "treat the shared schema as a contract," but the contract has no module — raw SQL with table/column names sits inline in the route handlers.</p>
+              </div>
+              <div>
+                <p class="text-xs uppercase label text-slate-400 mb-1">Solution</p>
+                <p class="text-sm text-slate-700">A <span class="font-mono text-xs">DemographicRepo</span> module: the single place that knows the table, columns and <span class="font-mono text-xs">search_path</span>, returning domain rows.</p>
+              </div>
+            </div>
+            <div>
+              <p class="text-xs uppercase label text-slate-400 mb-2">Wins</p>
+              <ul class="text-sm text-slate-700 space-y-1.5">
+                <li>✦ locality: schema knowledge in one module</li>
+                <li>✦ a seam for the missing contract test</li>
+                <li>✦ handlers stop knowing columns</li>
+                <li>✦ two adapters: real Postgres + in-memory fake</li>
+              </ul>
+              <p class="text-xs text-slate-500 mt-3">Sizing: only two queries today, so the deletion test is weak <em>now</em> — but the coupling risk is real and grows with the anticipated <span class="font-mono text-xs">territory_name &rarr; regions</span> join.</p>
+            </div>
+          </div>
+        </article>
+
+        <!-- ===================== CANDIDATE 4 ===================== -->
+        <article id="c4" class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="px-7 pt-7 pb-4">
+            <div class="flex items-center gap-3 flex-wrap mb-3">
+              <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-200 text-slate-700">Speculative</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">ports &amp; adapters</span>
+              <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">greenfield placement</span>
+            </div>
+            <h2 class="text-2xl font-serif font-semibold">Place the Selection layer as its own deep module</h2>
+            <p class="font-mono text-xs text-slate-500 mt-2">
+              CONTEXT.md (Selection layer, Estimate) · frontend JuMap/classes/MapWrapper.ts (subscribe, no subscribers) · AreaTypeSelector.tsx:50
+            </p>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-px bg-slate-200 border-y border-slate-200">
+            <div class="bg-white p-5">
+              <p class="text-xs uppercase label text-slate-400 mb-3">Before — resolution has no home</p>
+              <pre class="mermaid">
+flowchart TD
+  CLICK["map click<br/>(comune Monteverde)"]
+  Q{"who maps shape &rarr;<br/>Territory + level?"}
+  MONO["monolith?<br/>can't — no edits"]
+  DEMO["demographic-svc?<br/>can't — does no geometry"]
+  WID["each widget reinvents it?"]
+  CLICK --> Q
+  Q -.-> MONO
+  Q -.-> DEMO
+  Q -.-> WID
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#dc2626;
+  class MONO,DEMO,WID leak
+              </pre>
+            </div>
+            <div class="bg-white p-5">
+              <p class="text-xs uppercase label text-slate-400 mb-3">After — one resolution interface</p>
+              <pre class="mermaid">
+flowchart TD
+  CLICK["map click"]
+  SEL["Selection layer<br/>shape &rarr; Territory, level, estimate?"]
+  DEMO["demographic-svc<br/>(geometry-free)"]
+  W2["weather widget"]
+  W3["future widget"]
+  CLICK --> SEL
+  SEL -->|"territory=Avellino<br/>level=province"| DEMO
+  SEL --> W2
+  SEL --> W3
+  classDef deep fill:#0f172a,stroke:#0f172a,color:#fff;
+  class SEL deep
+              </pre>
+            </div>
+          </div>
+
+          <div class="px-7 py-6 grid md:grid-cols-2 gap-8">
+            <div class="space-y-4">
+              <div>
+                <p class="text-xs uppercase label text-slate-400 mb-1">Problem</p>
+                <p class="text-sm text-slate-700">CONTEXT.md defines the Selection layer (click &rarr; Territory params + estimate flag) but no module owns geographic resolution; it fits neither the untouchable monolith nor the geometry-free demographic service.</p>
+              </div>
+              <div>
+                <p class="text-xs uppercase label text-slate-400 mb-1">Solution</p>
+                <p class="text-sm text-slate-700">Make the Selection layer its own deep module behind one interface: clicked shape &rarr; resolved Territory, level, and an honest estimate flag.</p>
+              </div>
+            </div>
+            <div>
+              <p class="text-xs uppercase label text-slate-400 mb-2">Wins</p>
+              <ul class="text-sm text-slate-700 space-y-1.5">
+                <li>✦ leverage: one resolution interface, every widget</li>
+                <li>✦ locality: geometry in one module</li>
+                <li>✦ keeps demographic-svc geometry-free (per CONTEXT.md)</li>
+                <li>✦ wires up MapWrapper's orphaned subscribe seam</li>
+              </ul>
+              <p class="text-xs text-slate-500 mt-3">Speculative: greenfield placement, not yet built — surfaced so the seam is chosen before the first widget hard-codes resolution into itself.</p>
+            </div>
+          </div>
+        </article>
+
+      </section>
+
+      <!-- ===================== GAPS & RISKS ===================== -->
+      <section id="gaps" class="space-y-6">
+        <div class="space-y-2">
+          <p class="text-xs uppercase tracking-widest text-slate-500">Gaps &amp; risks · would-block-or-bite</p>
+          <h2 class="text-2xl font-serif font-semibold tracking-tight">What's missing before any of this runs</h2>
+          <p class="text-slate-600 max-w-3xl text-sm leading-relaxed">
+            These are not deepening candidates — they are concrete operational / correctness gaps found while reading the code.
+            The candidates above make the architecture <em>better</em>; these decide whether it <em>works at all</em>.
+          </p>
+          <div class="flex flex-wrap gap-3 text-xs text-slate-600 pt-1">
+            <span class="flex items-center gap-2"><span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-800">Blocker</span> runtime fails without it</span>
+            <span class="flex items-center gap-2"><span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Warning</span> works, but bites later</span>
+            <span class="flex items-center gap-2"><span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">Cleanup</span> dead weight</span>
+          </div>
+        </div>
+
+        <div class="grid gap-4">
+
+          <!-- G1 -->
+          <div id="g1" class="rounded-xl border border-red-200 bg-white shadow-sm overflow-hidden">
+            <div class="border-l-4 border-red-500 px-6 py-5">
+              <div class="flex items-center gap-3 flex-wrap mb-2">
+                <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-red-100 text-red-800">Blocker</span>
+                <h3 class="text-lg font-serif font-semibold">Runtime configuration is absent</h3>
+              </div>
+              <p class="font-mono text-xs text-slate-500 mb-3">
+                demographic-service: config/__init__.py:21-23 (empty defaults) · docker-compose.dev.yml (no env_file / environment) · no .env, no .env.example
+              </p>
+              <p class="text-sm text-slate-700">
+                <span class="font-mono text-xs">Settings</span> defaults <span class="font-mono text-xs">database_url</span> and <span class="font-mono text-xs">jwt_verification_key</span> to empty strings, and the dev compose passes neither an <span class="font-mono text-xs">env_file</span> nor an <span class="font-mono text-xs">environment</span> block. The service boots and <span class="font-mono text-xs">/health</span> answers (the engine is lazy), but <strong>every real call fails</strong> — no DB connection, no verifiable JWT.
+              </p>
+              <p class="text-xs text-slate-500 mt-2"><span class="font-semibold">Fix:</span> add a <span class="font-mono text-xs">.env.example</span> (<span class="font-mono text-xs">DATABASE_URL</span>, <span class="font-mono text-xs">JWT_VERIFICATION_KEY</span>, <span class="font-mono text-xs">JWT_ALGORITHM</span>) and wire an <span class="font-mono text-xs">env_file</span> into the compose service. This is the most likely thing standing between you and a working call.</p>
+            </div>
+          </div>
+
+          <!-- G2 -->
+          <div id="g2" class="rounded-xl border border-red-200 bg-white shadow-sm overflow-hidden">
+            <div class="border-l-4 border-red-500 px-6 py-5">
+              <div class="flex items-center gap-3 flex-wrap mb-2">
+                <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-red-100 text-red-800">Blocker</span>
+                <h3 class="text-lg font-serif font-semibold">The service is not wired into the frontend</h3>
+              </div>
+              <p class="font-mono text-xs text-slate-500 mb-3">
+                frontend/src — no reference to <span class="font-mono">/demographics</span> or <span class="font-mono">:28001</span> in any dashboard config
+              </p>
+              <p class="text-sm text-slate-700">
+                Nothing in the frontend points at the demographic service. <span class="font-mono text-xs">resolveUrl</span> (fetch-wrapper.ts:10) only reaches an external widget if a dashboard config carries an absolute URL — and none do yet. Until the <a href="#c1" class="underline decoration-slate-400">edge gateway</a> (ADR-0002) exists (or a stop-gap absolute URL is added), the widget is unreachable from the UI. The "Strangler Fig" is, for now, theoretical.
+              </p>
+              <p class="text-xs text-slate-500 mt-2"><span class="font-semibold">Fix (ADR-0002):</span> resolved by the edge gateway — point <span class="font-mono text-xs">NEXT_PUBLIC_BACKEND_URL</span> at the gateway (same origin) and use relative paths only.</p>
+            </div>
+          </div>
+
+          <!-- G3 -->
+          <div id="g3" class="rounded-xl border border-amber-200 bg-white shadow-sm overflow-hidden">
+            <div class="border-l-4 border-amber-500 px-6 py-5">
+              <div class="flex items-center gap-3 flex-wrap mb-2">
+                <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">Warning</span>
+                <h3 class="text-lg font-serif font-semibold">CORS is wide open</h3>
+              </div>
+              <p class="font-mono text-xs text-slate-500 mb-3">demographic-service: app.py:15-21</p>
+              <p class="text-sm text-slate-700">
+                <span class="font-mono text-xs">allow_origin_regex=r"https?://.*"</span> with <span class="font-mono text-xs">allow_credentials=True</span> accepts <em>any</em> origin. It works (Starlette reflects the matched origin), but it is "allow everything."
+              </p>
+              <p class="text-xs text-slate-500 mt-2"><span class="font-semibold">Fix (ADR-0002):</span> with the same-origin edge gateway, the browser never calls this service directly — the gateway does, server-to-server, where browser CORS does not apply. The service <strong>drops CORS entirely</strong>, rather than "tightening it to the gateway's origin" (a meaningless target: the gateway is not a browser and sends no enforced <span class="font-mono text-xs">Origin</span>).</p>
+            </div>
+          </div>
+
+          <!-- G4 -->
+          <div id="g4" class="rounded-xl border border-amber-200 bg-white shadow-sm overflow-hidden">
+            <div class="border-l-4 border-amber-500 px-6 py-5">
+              <div class="flex items-center gap-3 flex-wrap mb-2">
+                <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">Warning</span>
+                <h3 class="text-lg font-serif font-semibold">Schema coupling has no safety net</h3>
+              </div>
+              <p class="font-mono text-xs text-slate-500 mb-3">demographic-service: demographics_router.py:108-141 (inline SQL) · docs/adr/0001-shared-database.md</p>
+              <p class="text-sm text-slate-700">
+                Exactly ADR-0001's warning: a monolith column rename breaks the read query with no compile-time signal, and there is no integration / contract test today. The coupling is real and grows with the anticipated <span class="font-mono text-xs">territory_name &rarr; regions</span> join.
+              </p>
+              <p class="text-xs text-slate-500 mt-2"><span class="font-semibold">Fix:</span> this is what <a href="#c3" class="underline decoration-slate-400">candidate 3 (DemographicRepo)</a> addresses — a single module that owns the schema knowledge and hosts the missing test.</p>
+            </div>
+          </div>
+
+          <!-- G5 -->
+          <div id="g5" class="rounded-xl border border-amber-200 bg-white shadow-sm overflow-hidden">
+            <div class="border-l-4 border-amber-500 px-6 py-5">
+              <div class="flex items-center gap-3 flex-wrap mb-2">
+                <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">Warning</span>
+                <h3 class="text-lg font-serif font-semibold">The monolith is vendored as plain directories</h3>
+              </div>
+              <p class="font-mono text-xs text-slate-500 mb-3">monastero-janus-backend/ · monastero-janus-frontend/ — no .gitmodules, no nested .git</p>
+              <p class="text-sm text-slate-700">
+                The "read-only base" lives as ordinary committed folders, not submodules. It works, but it bloats the repo, mixes histories, and pins no monolith version that the microservice is tested against — yet the whole design depends on the monolith's schema and JWT contract.
+              </p>
+              <p class="text-xs text-slate-500 mt-2"><span class="font-semibold">Fix:</span> if the monolith is meant to be an immutable external dependency, prefer git submodules (or a separate repo + version pin); if it is only local reference material, consider not committing it.</p>
+            </div>
+          </div>
+
+          <!-- G6 -->
+          <div id="g6" class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div class="border-l-4 border-slate-400 px-6 py-5">
+              <div class="flex items-center gap-3 flex-wrap mb-2">
+                <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-200 text-slate-700">Cleanup</span>
+                <h3 class="text-lg font-serif font-semibold">Dead <span class="font-mono text-lg">/ping</span> endpoint</h3>
+              </div>
+              <p class="font-mono text-xs text-slate-500 mb-3">demographic-service: demographics_router.py:158-165</p>
+              <p class="text-sm text-slate-700">
+                A leftover placeholder from "Task 03," already superseded by <span class="font-mono text-xs">/raw</span> and <span class="font-mono text-xs">/territories</span>. Dead weight behind the auth guard.
+              </p>
+              <p class="text-xs text-slate-500 mt-2"><span class="font-semibold">Fix:</span> delete it.</p>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ===================== TOP RECOMMENDATION ===================== -->
+      <section id="top-recommendation">
+        <div class="rounded-xl deep text-white p-8 shadow-md">
+          <p class="text-xs uppercase label text-emerald-300 mb-2">Top recommendation</p>
+          <h2 class="text-2xl font-serif font-semibold mb-3">Start with the edge gateway <a href="#c1" class="text-emerald-300 text-base font-sans">→ candidate 1 · resolved (ADR-0002)</a></h2>
+          <p class="text-sm text-slate-200 max-w-3xl leading-relaxed">
+            Without it, "Strangler Fig" is just two services the frontend already knows about individually, with routing smeared across dashboard config.
+            The gateway is the pattern's defining seam: it lets new widgets strangle the monolith one route at a time, keeps the frontend's single-origin assumption intact, and never edits the monolith.
+            Build it first — then <a href="#c2" class="underline decoration-emerald-400">candidate 2</a> (the Widget Service Kit) makes every service behind the gateway thin.
+          </p>
+        </div>
+      </section>
+
+      <footer class="text-xs text-slate-400 pt-6 border-t border-slate-200">
+        Generated 2026-06-01 · vocabulary: CONTEXT.md (domain) + LANGUAGE.md (architecture) · monolith treated as read-only base.
+      </footer>
+
+    </main>
+  </body>
+</html>

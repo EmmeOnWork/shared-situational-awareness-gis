@@ -1,0 +1,112 @@
+name: janus-stack
+
+networks:
+  janus-net:
+    driver: bridge
+
+services:
+  edge-gateway:
+    image: caddy:2
+    # The single same-origin front door — the ONLY port published to the host.
+    ports:
+      - "8080:8080"
+    environment:
+      # Site address = the per-environment TLS toggle (ADR-0002, Module 2). Local
+      # is the port-only HTTP form; staging/prod inject a hostname instead, which
+      # turns on Caddy's automatic HTTPS (and WSS) — same Caddyfile, only this value
+      # changes. The published port below is this same 8080.
+      GATEWAY_SITE_ADDRESS: ":8080"
+      # Upstreams are injected per-environment; here they are compose service
+      # names resolved on the internal network — the SAME Caddyfile, different
+      # addresses (ADR-0002, Module 2). No second copy of the routing logic.
+      DEMOGRAPHIC_UPSTREAM: "http://demographic-service:28001"
+      MONOLITH_UPSTREAM: "http://ju-backend:8000"
+      FRONTEND_UPSTREAM: "http://janus-dashboard-ui:3000"
+    volumes:
+      # Reuse the SAME Caddyfile every environment runs (the routing-contract
+      # tests' file), mounted read-only — the routing map lives in one file.
+      - ./edge-gateway/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - demographic-service
+      - ju-backend
+      - janus-dashboard-ui
+    networks:
+      - janus-net
+    restart: unless-stopped
+
+  demographic-service:
+    build:
+      context: ./demographic-service
+      dockerfile: Dockerfile
+    # No published ports: reachable only through the gateway (ADR-0002).
+    environment:
+      # Shared DB (ADR-0001); lazily connected, so /health and /demographics/ping
+      # answer without it. Supply DATABASE_URL to serve real demographic reads.
+      DATABASE_URL: "${DATABASE_URL:-}"
+      # Dev JWT verification: lets the documented reachability smoke mint a
+      # demographics:read token the service verifies, so /demographics/ping returns
+      # 200 through the gateway without seeding the database. The monolith issues
+      # real tokens in staging/prod; this HS256 key is local-only, not a secret.
+      JWT_ALGORITHM: "${JWT_ALGORITHM:-HS256}"
+      JWT_VERIFICATION_KEY: "${JWT_VERIFICATION_KEY:-CHANGE_ME}"
+    networks:
+      - janus-net
+    restart: unless-stopped
+
+  ju-backend:
+    build:
+      context: ./monastero-janus-backend
+      dockerfile: Dockerfile.dev
+    # No published ports: the monolith backend is the gateway's catch-all upstream,
+    # reachable only server-to-server.
+    volumes:
+      # Dockerfile.dev mounts src rather than copying it; read-only here so this
+      # orchestration never writes into (or otherwise modifies) the monolith repo.
+      - ./monastero-janus-backend/src:/app/src:ro
+    environment:
+      # Passed through from the host / a root .env — the monolith's own config,
+      # untouched by this slice (the monolith's code stays byte-for-byte the same).
+      - POSTGRESQL_URI
+      - MONGODB_URI
+      - MONGODB_DB
+      - OPENROUTER_API_KEY
+      - JWT_ALGORITHM
+      - JWT_PRIVATE_KEY
+      - JWT_VERIFICATION_KEY
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES
+    networks:
+      - janus-net
+    restart: unless-stopped
+
+  janus-dashboard-ui:
+    build:
+      context: ./monastero-janus-frontend
+      dockerfile: Dockerfile.dev
+    # No published ports: the Next frontend is served to browsers through the
+    # gateway at / (single origin), never directly.
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      # The browser's single origin is the gateway (ADR-0002, Module 5): the Next
+      # app resolves every relative path against this base URL, so framework calls
+      # (/dashboards, /auth) and Widget calls (/demographics) all flow through the
+      # one front door — never at the backend directly. NEXT_PUBLIC_* is inlined at
+      # build, so this is a per-environment value (staging/prod inject their own
+      # gateway origin), not one image reused everywhere.
+      - NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL:-http://localhost:8080}
+      - NEXT_PUBLIC_GRAPHQL_ENDPOINT=${NEXT_PUBLIC_GRAPHQL_ENDPOINT:-https://il-tuo-endpoint/graphql}
+      - NEXT_PUBLIC_THESIS_API_URL=${NEXT_PUBLIC_THESIS_API_URL:-https://il-tuo-thesis-api-url}
+    volumes:
+      # Mirror the frontend's own dev compose: project mounted for hot-reload,
+      # with node_modules kept in a container-managed volume. (.next/ and
+      # node_modules/ are git-ignored, so a run never dirties the monolith repo.)
+      - ./monastero-janus-frontend:/app:cached
+      - ui-node-modules:/app/node_modules
+    command: sh -c "npm run dev -- --hostname 0.0.0.0 --port 3000"
+    networks:
+      - janus-net
+    restart: unless-stopped
+
+volumes:
+  ui-node-modules:
+    driver: local

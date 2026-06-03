@@ -11,7 +11,13 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY ./src /app/src
 
+# Create a non-root user and give ownership of the app directory to it
+RUN groupadd -r app && useradd -r -g app app \
+	&& chown -R app:app /app
+
+
 # Own dev port (the monolith uses 28000).
 EXPOSE 28001
+USER app
 
 CMD ["uvicorn", "src.app:app", "--host", "0.0.0.0", "--port", "28001"]
