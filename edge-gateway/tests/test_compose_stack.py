@@ -43,8 +43,8 @@ def test_stack_brings_up_all_four_components_on_one_shared_network():
 
     gateway_name, gateway = compose_gateway(compose)
     demographic_name, _ = compose_service_built_from(compose, "demographic-service")
-    backend_name, _ = compose_service_built_from(compose, "monastero-janus-backend")
-    frontend_name, _ = compose_service_built_from(compose, "monastero-janus-frontend")
+    backend_name, _ = compose_service_built_from(compose, "monolith/backend")
+    frontend_name, _ = compose_service_built_from(compose, "monolith/frontend")
 
     components = {gateway_name, demographic_name, backend_name, frontend_name}
     assert None not in components, (
@@ -98,8 +98,8 @@ def test_gateway_upstreams_are_injected_as_compose_service_names():
 
     env = compose_env(gateway)
     demographic_name, _ = compose_service_built_from(compose, "demographic-service")
-    backend_name, _ = compose_service_built_from(compose, "monastero-janus-backend")
-    frontend_name, _ = compose_service_built_from(compose, "monastero-janus-frontend")
+    backend_name, _ = compose_service_built_from(compose, "monolith/backend")
+    frontend_name, _ = compose_service_built_from(compose, "monolith/frontend")
 
     # Each upstream the gateway interpolates points at the matching component's
     # compose service name — resolved server-to-server on the internal network.

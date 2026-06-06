@@ -59,8 +59,8 @@ def test_frontend_base_url_points_at_the_gateway_single_origin():
     so every relative-path request the frontend makes lands on the single origin."""
     compose = compose_doc()
     _, gateway = compose_gateway(compose)
-    _, frontend = compose_service_built_from(compose, "monastero-janus-frontend")
-    backend_name, _ = compose_service_built_from(compose, "monastero-janus-backend")
+    _, frontend = compose_service_built_from(compose, "monolith/frontend")
+    backend_name, _ = compose_service_built_from(compose, "monolith/backend")
 
     base_url = _compose_default(compose_env(frontend).get("NEXT_PUBLIC_BACKEND_URL"))
     assert base_url, "frontend must set NEXT_PUBLIC_BACKEND_URL (the gateway origin)"

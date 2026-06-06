@@ -123,16 +123,26 @@ flowchart TD
         </article>
 
         <!-- ===================== CANDIDATE 2 ===================== -->
-        <article id="c2" class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <article id="c2" class="rounded-xl border border-amber-300 bg-white shadow-sm overflow-hidden">
           <div class="px-7 pt-7 pb-4">
             <div class="flex items-center gap-3 flex-wrap mb-3">
-              <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">Strong</span>
+              <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">Deferred — extract on the 2nd service</span>
               <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">in-process</span>
               <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">deduplicate</span>
             </div>
             <h2 class="text-2xl font-serif font-semibold">Collapse the copied contract into a Widget Service Kit</h2>
             <p class="font-mono text-xs text-slate-500 mt-2">
               demographic-service: models/pyd_models.py:6 · security/jwt_utils.py:17 · security/auth_dependencies.py:74 · config/pgsql_config.py:41
+            </p>
+            <p class="text-sm text-slate-600 mt-3">
+              Reviewed in a grilling session (2026-06-03). Outcome: <strong>defer the
+              extraction until a second service actually exists.</strong> With only
+              demographic-service in tree, this is a deduplication at <strong>N=1</strong> —
+              every win below (one import, N services, a thin next widget) is worth
+              <em>zero</em> until there is a second consumer. Extracting a shared shape from a
+              single example also risks freezing demographic-specific plumbing as if it were
+              universal. The boxes below are kept as the original framing; the corrected
+              reading is in the conclusion box.
             </p>
           </div>
 
@@ -154,7 +164,7 @@ flowchart TD
                   <p class="text-[10px] uppercase label text-slate-500 mt-2">next-svc</p>
                 </div>
               </div>
-              <p class="text-xs text-slate-500 mt-3">Copied plumbing is as tall as the real work. JWT contract drift has no single home.</p>
+              <p class="text-xs text-slate-500 mt-3">Copied plumbing is as tall as the real work. <span class="line-through opacity-60">JWT contract drift has no single home.</span> <span class="text-amber-700">Correction: the contract's home is the monolith — which ADR-0001 forbids importing. A kit gives one home <em>among the widget siblings</em>, not one that tracks the monolith.</span></p>
             </div>
             <div class="bg-white p-5">
               <p class="text-xs uppercase label text-slate-400 mb-4">After — one deep kit, thin services</p>
@@ -201,8 +211,14 @@ flowchart TD
             </div>
           </div>
 
-          <div class="mx-7 mb-7 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900">
-            <span class="font-semibold">Touches ADR-0001 — but compatible.</span> The ADR says <span class="font-mono text-xs">DataResponse</span> is <em>copied, not imported</em> to avoid depending on the monolith. The kit is a <em>third</em> package both new services depend on — not the monolith — so the ADR's intent holds. It does revisit the copy-paste choice across the <em>new</em> services; worth a one-line ADR amendment.
+          <div class="mx-7 mb-7 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900 space-y-2">
+            <p><span class="font-semibold">Conclusion (grilling 2026-06-03): deferred, not dropped.</span> The idea is sound but premature. Record the <em>intent</em> — "at the second service, extract the pieces that prove identical to the copy" — and leave the copies until then.</p>
+            <ul class="space-y-1 list-disc pl-5">
+              <li><span class="font-semibold">N=1 means no leverage yet.</span> "One import, N services" and "next widget starts thin" pay off at the <em>second</em> copy, not the first.</li>
+              <li><span class="font-semibold">The four pieces are not equal extraction candidates.</span> <span class="font-mono text-xs">DataResponse</span> (a 10-line DTO) is the safest; the auth pair (<span class="font-mono text-xs">verify_access_token</span> + <span class="font-mono text-xs">require_scopes</span>) is the real deep value; <span class="font-mono text-xs">get_session_context</span> is <em>already</em> a demographic-specific shape ("read the shared DB with <span class="font-mono text-xs">search_path=public</span>") — a compute-only or own-table widget would not use it. The second service is what reveals which are truly common.</li>
+              <li><span class="font-semibold">The kit does not fix drift against the monolith.</span> The monolith is the source of truth for the JWT claims and the <span class="font-mono text-xs">DataResponse</span> shape, and ADR-0001 forbids importing it. A kit unifies the widget <em>siblings</em>; it still drifts from the monolith exactly as the copies do.</li>
+              <li><span class="font-semibold">ADR at extraction time, not now.</span> Introducing a shared dependency across services is a genuine reversal of ADR-0001's "copied, not imported" and a new deployment-coupling point — worth its own ADR <em>when</em> the second service forces it, not a speculative one-liner today.</li>
+            </ul>
           </div>
         </article>
 
@@ -358,60 +374,70 @@ flowchart TD
             The candidates above make the architecture <em>better</em>; these decide whether it <em>works at all</em>.
           </p>
           <div class="flex flex-wrap gap-3 text-xs text-slate-600 pt-1">
+            <span class="flex items-center gap-2"><span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Resolved</span> closed by the gateway commit</span>
             <span class="flex items-center gap-2"><span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-800">Blocker</span> runtime fails without it</span>
             <span class="flex items-center gap-2"><span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Warning</span> works, but bites later</span>
             <span class="flex items-center gap-2"><span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">Cleanup</span> dead weight</span>
           </div>
         </div>
 
+        <div class="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-900">
+          <span class="font-semibold">Re-triaged 2026-06-03 against the post-gateway code (commit <span class="font-mono text-xs">652d818</span>).</span>
+          This list was generated 2026-06-01, <em>before</em> the edge gateway landed, so it
+          reads the pre-gateway tree. Several gaps are now resolved or have changed shape;
+          the statuses below are corrected, and one "cleanup" was reversed — <span class="font-mono text-xs">/ping</span>
+          turned out to be load-bearing. The only genuine open <em>decision</em> left is
+          <a href="#g5" class="underline decoration-emerald-600">G5</a>.
+        </div>
+
         <div class="grid gap-4">
 
           <!-- G1 -->
-          <div id="g1" class="rounded-xl border border-red-200 bg-white shadow-sm overflow-hidden">
-            <div class="border-l-4 border-red-500 px-6 py-5">
+          <div id="g1" class="rounded-xl border border-amber-200 bg-white shadow-sm overflow-hidden">
+            <div class="border-l-4 border-amber-500 px-6 py-5">
               <div class="flex items-center gap-3 flex-wrap mb-2">
-                <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-red-100 text-red-800">Blocker</span>
-                <h3 class="text-lg font-serif font-semibold">Runtime configuration is absent</h3>
+                <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">Mostly resolved</span>
+                <h3 class="text-lg font-serif font-semibold">Runtime configuration <span class="line-through opacity-50">is absent</span> — now injected, real-reads residual</h3>
               </div>
               <p class="font-mono text-xs text-slate-500 mb-3">
-                demographic-service: config/__init__.py:21-23 (empty defaults) · docker-compose.dev.yml (no env_file / environment) · no .env, no .env.example
+                docker-compose.yml:42-51 (env now injected) · demographic-service: config/__init__.py:21-23 (empty defaults) · still no .env.example for the service
               </p>
               <p class="text-sm text-slate-700">
-                <span class="font-mono text-xs">Settings</span> defaults <span class="font-mono text-xs">database_url</span> and <span class="font-mono text-xs">jwt_verification_key</span> to empty strings, and the dev compose passes neither an <span class="font-mono text-xs">env_file</span> nor an <span class="font-mono text-xs">environment</span> block. The service boots and <span class="font-mono text-xs">/health</span> answers (the engine is lazy), but <strong>every real call fails</strong> — no DB connection, no verifiable JWT.
+                <span class="font-semibold">Update (652d818):</span> the gateway commit gave demographic-service an <span class="font-mono text-xs">environment</span> block — <span class="font-mono text-xs">DATABASE_URL</span> passthrough plus a local <span class="font-mono text-xs">HS256</span> dev JWT key — so the auth path and the <span class="font-mono text-xs">/demographics/ping</span> reachability smoke work through the gateway <em>without</em> the DB. What remains: <span class="font-mono text-xs">Settings</span> still defaults <span class="font-mono text-xs">database_url</span> to empty, and there is no <span class="font-mono text-xs">.env.example</span>, so the <strong>real reads</strong> (<span class="font-mono text-xs">/raw</span>, <span class="font-mono text-xs">/territories</span>) still fail until a real <span class="font-mono text-xs">DATABASE_URL</span> is supplied.
               </p>
-              <p class="text-xs text-slate-500 mt-2"><span class="font-semibold">Fix:</span> add a <span class="font-mono text-xs">.env.example</span> (<span class="font-mono text-xs">DATABASE_URL</span>, <span class="font-mono text-xs">JWT_VERIFICATION_KEY</span>, <span class="font-mono text-xs">JWT_ALGORITHM</span>) and wire an <span class="font-mono text-xs">env_file</span> into the compose service. This is the most likely thing standing between you and a working call.</p>
+              <p class="text-xs text-slate-500 mt-2"><span class="font-semibold">Fix (residual, execution):</span> add a demographic-service <span class="font-mono text-xs">.env.example</span> documenting <span class="font-mono text-xs">DATABASE_URL</span> pointing at the <strong>shared Supabase</strong> (ADR-0001; the <span class="font-mono text-xs">public.demographic</span> table is assumed already loaded — a local seeded Postgres would mean the out-of-scope ETL/DDL). No architecture decision here.</p>
             </div>
           </div>
 
           <!-- G2 -->
-          <div id="g2" class="rounded-xl border border-red-200 bg-white shadow-sm overflow-hidden">
-            <div class="border-l-4 border-red-500 px-6 py-5">
+          <div id="g2" class="rounded-xl border border-emerald-200 bg-white shadow-sm overflow-hidden">
+            <div class="border-l-4 border-emerald-500 px-6 py-5">
               <div class="flex items-center gap-3 flex-wrap mb-2">
-                <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-red-100 text-red-800">Blocker</span>
-                <h3 class="text-lg font-serif font-semibold">The service is not wired into the frontend</h3>
+                <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">Resolved</span>
+                <h3 class="text-lg font-serif font-semibold"><span class="line-through opacity-50">The service is not wired into the frontend</span></h3>
               </div>
               <p class="font-mono text-xs text-slate-500 mb-3">
-                frontend/src — no reference to <span class="font-mono">/demographics</span> or <span class="font-mono">:28001</span> in any dashboard config
+                docker-compose.yml:81-96 (frontend served via gateway, <span class="font-mono">NEXT_PUBLIC_BACKEND_URL</span> → gateway) · edge-gateway/Caddyfile (<span class="font-mono">/demographics</span> route)
               </p>
               <p class="text-sm text-slate-700">
-                Nothing in the frontend points at the demographic service. <span class="font-mono text-xs">resolveUrl</span> (fetch-wrapper.ts:10) only reaches an external widget if a dashboard config carries an absolute URL — and none do yet. Until the <a href="#c1" class="underline decoration-slate-400">edge gateway</a> (ADR-0002) exists (or a stop-gap absolute URL is added), the widget is unreachable from the UI. The "Strangler Fig" is, for now, theoretical.
+                <span class="font-semibold">Closed by 652d818.</span> The edge gateway (ADR-0002) is now built: the frontend's single origin is the gateway, and <span class="font-mono text-xs">/demographics</span> is routed to demographic-service server-to-server. A relative <span class="font-mono text-xs">/demographics/…</span> call from the UI now reaches the service. (Whether a given dashboard <em>panel</em> chooses to render the widget is a product question, not a reachability gap.)
               </p>
-              <p class="text-xs text-slate-500 mt-2"><span class="font-semibold">Fix (ADR-0002):</span> resolved by the edge gateway — point <span class="font-mono text-xs">NEXT_PUBLIC_BACKEND_URL</span> at the gateway (same origin) and use relative paths only.</p>
+              <p class="text-xs text-slate-500 mt-2"><span class="font-semibold">Resolution (ADR-0002):</span> as prescribed — gateway is the same-origin front door, relative paths only.</p>
             </div>
           </div>
 
           <!-- G3 -->
-          <div id="g3" class="rounded-xl border border-amber-200 bg-white shadow-sm overflow-hidden">
-            <div class="border-l-4 border-amber-500 px-6 py-5">
+          <div id="g3" class="rounded-xl border border-emerald-200 bg-white shadow-sm overflow-hidden">
+            <div class="border-l-4 border-emerald-500 px-6 py-5">
               <div class="flex items-center gap-3 flex-wrap mb-2">
-                <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">Warning</span>
-                <h3 class="text-lg font-serif font-semibold">CORS is wide open</h3>
+                <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">Resolved</span>
+                <h3 class="text-lg font-serif font-semibold"><span class="line-through opacity-50">CORS is wide open</span></h3>
               </div>
-              <p class="font-mono text-xs text-slate-500 mb-3">demographic-service: app.py:15-21</p>
+              <p class="font-mono text-xs text-slate-500 mb-3">demographic-service: app.py (no <span class="font-mono">CORSMiddleware</span> remains)</p>
               <p class="text-sm text-slate-700">
-                <span class="font-mono text-xs">allow_origin_regex=r"https?://.*"</span> with <span class="font-mono text-xs">allow_credentials=True</span> accepts <em>any</em> origin. It works (Starlette reflects the matched origin), but it is "allow everything."
+                <span class="font-semibold">Closed by 652d818.</span> The wide-open <span class="font-mono text-xs">allow_origin_regex=r"https?://.*"</span> middleware was removed: <span class="font-mono text-xs">app.py</span> now carries <em>no</em> CORS at all. Behind the same-origin gateway the browser never calls this service directly, so server-to-server calls are not subject to browser CORS — exactly as ADR-0002 prescribed.
               </p>
-              <p class="text-xs text-slate-500 mt-2"><span class="font-semibold">Fix (ADR-0002):</span> with the same-origin edge gateway, the browser never calls this service directly — the gateway does, server-to-server, where browser CORS does not apply. The service <strong>drops CORS entirely</strong>, rather than "tightening it to the gateway's origin" (a meaningless target: the gateway is not a browser and sends no enforced <span class="font-mono text-xs">Origin</span>).</p>
+              <p class="text-xs text-slate-500 mt-2"><span class="font-semibold">Resolution (ADR-0002):</span> dropped entirely, not "tightened to the gateway's origin" (a meaningless target: the gateway is not a browser and sends no enforced <span class="font-mono text-xs">Origin</span>).</p>
             </div>
           </div>
 
@@ -434,29 +460,29 @@ flowchart TD
           <div id="g5" class="rounded-xl border border-amber-200 bg-white shadow-sm overflow-hidden">
             <div class="border-l-4 border-amber-500 px-6 py-5">
               <div class="flex items-center gap-3 flex-wrap mb-2">
-                <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">Warning</span>
+                <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">Warning · the one open decision</span>
                 <h3 class="text-lg font-serif font-semibold">The monolith is vendored as plain directories</h3>
               </div>
               <p class="font-mono text-xs text-slate-500 mb-3">monastero-janus-backend/ · monastero-janus-frontend/ — no .gitmodules, no nested .git</p>
               <p class="text-sm text-slate-700">
-                The "read-only base" lives as ordinary committed folders, not submodules. It works, but it bloats the repo, mixes histories, and pins no monolith version that the microservice is tested against — yet the whole design depends on the monolith's schema and JWT contract.
+                The "read-only base" lives as ordinary committed folders, not submodules. It works, but it bloats the repo, mixes histories, and pins no monolith version that the microservice is tested against — yet the whole design depends on the monolith's schema and JWT contract. This is the same unpinned contract the deferred kit (<a href="#c2" class="underline decoration-amber-500">candidate 2</a>) could not import anyway.
               </p>
-              <p class="text-xs text-slate-500 mt-2"><span class="font-semibold">Fix:</span> if the monolith is meant to be an immutable external dependency, prefer git submodules (or a separate repo + version pin); if it is only local reference material, consider not committing it.</p>
+              <p class="text-xs text-slate-500 mt-2"><span class="font-semibold">Fix (genuine decision — hard to reverse, unresolved as of 2026-06-03):</span> if the monolith is meant to be an immutable external dependency, prefer git submodules (or a separate repo + version pin); if it is only local reference material, consider not committing it. This is the only gap here that warrants its own grilling/ADR rather than execution.</p>
             </div>
           </div>
 
           <!-- G6 -->
-          <div id="g6" class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <div class="border-l-4 border-slate-400 px-6 py-5">
+          <div id="g6" class="rounded-xl border border-amber-200 bg-white shadow-sm overflow-hidden">
+            <div class="border-l-4 border-amber-500 px-6 py-5">
               <div class="flex items-center gap-3 flex-wrap mb-2">
-                <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-200 text-slate-700">Cleanup</span>
-                <h3 class="text-lg font-serif font-semibold">Dead <span class="font-mono text-lg">/ping</span> endpoint</h3>
+                <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">Correction — don't delete</span>
+                <h3 class="text-lg font-serif font-semibold"><span class="line-through opacity-50">Dead</span> load-bearing <span class="font-mono text-lg">/ping</span> endpoint</h3>
               </div>
-              <p class="font-mono text-xs text-slate-500 mb-3">demographic-service: demographics_router.py:158-165</p>
+              <p class="font-mono text-xs text-slate-500 mb-3">demographics_router.py:158-165 · test_auth.py:3 (<span class="font-mono">PROTECTED</span>) · docker-compose.yml:46-48 (reachability smoke)</p>
               <p class="text-sm text-slate-700">
-                A leftover placeholder from "Task 03," already superseded by <span class="font-mono text-xs">/raw</span> and <span class="font-mono text-xs">/territories</span>. Dead weight behind the auth guard.
+                <span class="font-semibold">The original "delete it" was wrong.</span> <span class="font-mono text-xs">/ping</span> is the only <strong>DB-free endpoint behind the auth guard</strong>, and two things now lean on exactly that: the whole auth suite targets it (<span class="font-mono text-xs">PROTECTED = "/demographics/ping"</span>), and the gateway commit made it the documented reachability smoke (a <span class="font-mono text-xs">demographics:read</span> token returns 200 through the gateway <em>without seeding the DB</em>). <span class="font-mono text-xs">/raw</span> and <span class="font-mono text-xs">/territories</span> both hit the DB, so they cannot stand in. Deleting <span class="font-mono text-xs">/ping</span> orphans 5 tests and the smoke.
               </p>
-              <p class="text-xs text-slate-500 mt-2"><span class="font-semibold">Fix:</span> delete it.</p>
+              <p class="text-xs text-slate-500 mt-2"><span class="font-semibold">Fix:</span> keep it, but give it an honest name/intent — it is the auth-and-reachability probe, not a "Task 03 leftover." Rename to something like <span class="font-mono text-xs">/health/auth</span> (or document <span class="font-mono text-xs">/ping</span> as the guarded smoke) and repoint the test + compose comment in the same change.</p>
             </div>
           </div>
 
@@ -471,13 +497,13 @@ flowchart TD
           <p class="text-sm text-slate-200 max-w-3xl leading-relaxed">
             Without it, "Strangler Fig" is just two services the frontend already knows about individually, with routing smeared across dashboard config.
             The gateway is the pattern's defining seam: it lets new widgets strangle the monolith one route at a time, keeps the frontend's single-origin assumption intact, and never edits the monolith.
-            Build it first — then <a href="#c2" class="underline decoration-emerald-400">candidate 2</a> (the Widget Service Kit) makes every service behind the gateway thin.
+            Build it first — then, <em>once a second service actually exists</em>, <a href="#c2" class="underline decoration-emerald-400">candidate 2</a> (the Widget Service Kit) makes every service behind the gateway thin. Deferred at N=1 (grilling 2026-06-03): with only demographic-service in tree the kit has no second consumer to be thin.
           </p>
         </div>
       </section>
 
       <footer class="text-xs text-slate-400 pt-6 border-t border-slate-200">
-        Generated 2026-06-01 · vocabulary: CONTEXT.md (domain) + LANGUAGE.md (architecture) · monolith treated as read-only base.
+        Generated 2026-06-01 · updated 2026-06-03 (grilling: candidate 2 deferred to the 2nd service; Gaps &amp; Risks re-triaged against post-gateway commit 652d818) · vocabulary: CONTEXT.md (domain) + LANGUAGE.md (architecture) · monolith treated as read-only base.
       </footer>
 
     </main>

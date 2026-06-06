@@ -1,16 +1,21 @@
 # Edge gateway — the single routing file (ADR-0002).
 #
-# One origin in front of the whole stack. Explicit widget prefixes route to
-# their services; everything the gateway does is reverse-proxying — no business
-# logic lives here. The site address and the upstream addresses are injected per
-# environment via Caddy env substitution ({$VAR}), so this same file runs
-# unchanged whether an upstream is a local port, a compose service name, or a
+# One origin in front of the whole stack. Explicit API/widget prefixes route to
+# their backend services; everything the gateway does is reverse-proxying — no
+# business logic lives here. The site address and the upstream addresses are
+# injected per environment via Caddy env substitution ({$VAR}), so this same file
+# runs unchanged whether an upstream is a local port, a compose service name, or a
 # staging/prod internal host.
 #
-# Routing is longest-prefix-match with a catch-all default: explicit widget
-# prefixes are matched first, the Next frontend serves the site root (/), and the
-# monolith backend is the final catch-all. Registering a new widget is one line —
-# add its prefix route above the catch-all.
+# Routing model: explicit backend prefixes are matched first; the Next frontend is
+# the catch-all default. The frontend owns the browser origin — it serves the
+# pages (/, /dashboard, /login, …), the framework assets under /_next/*, and the
+# public files (/favicon.ico, /images/*). Those paths are open-ended and grow with
+# every new page, so they CANNOT be enumerated; the backend's API surface is the
+# finite, enumerable side, so that is what we list. (This reverses the earlier
+# draft, where only "/" went to the frontend and the monolith was the catch-all:
+# under that rule every /_next/* asset fell through to FastAPI and 404'd, so the
+# frontend rendered with no CSS/JS. See the routing-contract tests.)
 
 {
 	admin off
@@ -23,30 +28,37 @@
 # rides it as WSS for free. Same file, same routing logic; only this one injected
 # value differs across local → staging → prod.
 {$GATEWAY_SITE_ADDRESS} {
+	# --- Widget services: each claims a fresh top-level prefix (ADR-0002) ---
+	#
 	# /demographics → demographic-service. Path is preserved (the service mounts
 	# its routes under /demographics), and the upstream is never hard-coded.
 	reverse_proxy /demographics* {$DEMOGRAPHIC_UPSTREAM}
 
-	# Registering a Widget is THIS — one route line above the catch-all, claiming
-	# a fresh top-level prefix. /geo-layers is the worked example: a new
-	# layers-style service. Strangling a route off the monolith is the same
-	# one-line move in reverse — re-point an entry's upstream.
-	#
-	# Standing rule: a new Widget MUST claim a fresh top-level prefix and MUST NOT
-	# reuse a prefix the monolith already owns — /auth, /dashboards, /layers,
-	# /areas, /pollution, /weather, /euklid, /pois, /reviews, /situation,
-	# /data-upload. (A new layers service picks /geo-layers, not /layers.) Reusing
-	# one would shadow the monolith's catch-all route for that path and break it.
+	# Registering a Widget is THIS — one route line, claiming a fresh top-level
+	# prefix above the frontend catch-all. /geo-layers is the worked example: a new
+	# layers-style service. Strangling a route off the monolith is the same one-line
+	# move in reverse — re-point an entry's upstream from the monolith to the new
+	# service. A new prefix must not collide with a monolith prefix below or with a
+	# frontend page route (/dashboard, /login, /signup, /configuration).
 	reverse_proxy /geo-layers* {$GEO_LAYERS_UPSTREAM}
 
-	# / → the Next frontend (the monolith frontend, served behind the gateway,
-	# unchanged). Exact-path matcher: only the site root resolves here, so unknown
-	# prefixes still fall through to the monolith catch-all below.
-	reverse_proxy / {$FRONTEND_UPSTREAM}
+	# --- Monolith backend: its finite, enumerated API surface ---
+	#
+	# These are every top-level prefix the monolith's routers mount (src/app.py:
+	# auth, weather, pois, reviews, situation, areas, pollution, layers, dashboards,
+	# euklid, data-upload) plus /health and FastAPI's docs endpoints. Because the
+	# frontend is now the catch-all, a monolith route MUST appear here or its calls
+	# would fall through to the frontend and 404 — so when the monolith adds a NEW
+	# top-level prefix, add it to this matcher (the one place the backend surface is
+	# listed). The monolith's own files stay byte-for-byte unchanged.
+	@monolith path /auth* /weather* /pois* /reviews* /situation* /areas* /pollution* /layers* /dashboards* /euklid* /data-upload* /health /docs /openapi.json /redoc
+	reverse_proxy @monolith {$MONOLITH_UPSTREAM}
 
-	# Catch-all (no matcher, written last): everything without an explicit widget
-	# prefix above falls through to the monolith backend. This is what lets the
-	# monolith add routes with zero gateway changes — the gateway respects the same
-	# "don't touch me as I evolve" contract the monolith does.
-	reverse_proxy {$MONOLITH_UPSTREAM}
+	# --- Catch-all → the Next frontend (the monolith frontend, unchanged) ---
+	#
+	# Everything not claimed above — the site root, all frontend pages, the /_next/*
+	# framework assets (CSS/JS/HMR), and public files — is served by the Next app.
+	# This is what makes the frontend render correctly through the single origin:
+	# its assets resolve to the Next server, not to a backend that doesn't have them.
+	reverse_proxy {$FRONTEND_UPSTREAM}
 }
