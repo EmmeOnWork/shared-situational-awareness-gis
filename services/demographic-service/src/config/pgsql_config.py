@@ -41,8 +41,9 @@ def _get_session_factory() -> sessionmaker:
 @contextmanager
 def get_session_context(schema: str = "public") -> Iterator[Session]:
     """Yield a session scoped to ``schema``, rolling back on error and always
-    closing. The demographic widget filters by name in the shared ``public``
-    schema and performs no geometry / spatial query."""
+    closing. The demographic widget reads the shared ``public`` schema: mostly
+    name lookups, plus the one ``ST_Contains`` click resolution in
+    ``/demographics/at-point`` (PostGIS, on the boundary sidecar table)."""
     session = _get_session_factory()()
     session.execute(text(f"SET search_path TO {schema}"))
     try:

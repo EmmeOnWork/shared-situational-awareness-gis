@@ -87,6 +87,11 @@ configuration exercised end-to-end by the gateway's
 2. Add **one** route to the Caddyfile: a fresh top-level prefix → the service.
 3. Add the service to `docker-compose.yml` (no published port).
 
+A Widget can own its **UI** as well as its data — shipping a self-contained
+custom element the service serves, mounted by a single generic seam in the
+monolith. That is the frontend half of this same strategy, written up separately:
+[Full-stack Widget microservices](widget-microservice-fullstack.md).
+
 The prefix **must** be fresh. A new service may not reuse a monolith prefix
 (`/auth`, `/dashboards`, `/layers`, `/areas`, `/pollution`, `/weather`,
 `/euklid`, `/pois`, `/reviews`, `/situation`, `/data-upload`) — a new layers

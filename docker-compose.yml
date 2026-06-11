@@ -54,9 +54,43 @@ services:
     depends_on:
       ju-postgres:
         condition: service_healthy
+      demographic-schema-init:
+        condition: service_completed_successfully
     networks:
       - janus-net
     restart: unless-stopped
+
+  # One-shot: ensures the demographic widget's *schema* exists (empty table),
+  # applied on every bring-up. Idempotent (CREATE TABLE IF NOT EXISTS) and loads
+  # NO data — the table is seeded separately (manual step, see the service's
+  # db/README). Kept out of the service runtime on purpose: the
+  # demographic-service stays a pure reader (ADR-0001), so the schema for its
+  # data comes up with the compose, not from the app. Reuses the postgres image
+  # already pulled for ju-postgres, so no extra download.
+  demographic-schema-init:
+    image: postgis/postgis:17-3.5
+    depends_on:
+      ju-postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-CHANGE_ME}
+    entrypoint: ["psql"]
+    command:
+      - "-h"
+      - "ju-postgres"
+      - "-U"
+      - "${POSTGRES_USER:-janus}"
+      - "-d"
+      - "${POSTGRES_DB:-janus}"
+      - "-v"
+      - "ON_ERROR_STOP=1"
+      - "-f"
+      - "/schema/demographic-schema.sql"
+    volumes:
+      - ./services/demographic-service/db/demographic-schema.sql:/schema/demographic-schema.sql:ro
+    networks:
+      - janus-net
+    restart: "no"
 
   ju-backend:
     build:

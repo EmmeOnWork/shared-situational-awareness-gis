@@ -10,6 +10,10 @@ each component's own README).
   services around the monolith, strangling it one route at a time, without ever
   editing its code. **Start here** to understand why the gateway, the shared
   database, and the per-service deployables exist as a single coherent move.
+- [Full-stack Widget microservices](widget-microservice-fullstack.md) — how a
+  Widget owns its **UI** as well as its data (a self-contained custom element the
+  service serves), via one generic `remote` seam added to the monolith once. Read
+  this to build a Widget that renders without the monolith.
 
 ## Decisions of record (ADRs)
 

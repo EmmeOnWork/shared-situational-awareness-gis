@@ -1,0 +1,14 @@
+{
+  "name": "demographic-widget-ui",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Self-contained UI bundle (custom element <demographic-widget>) for the demographic widget service.",
+  "scripts": {
+    "build": "esbuild src/demographic-widget.ts --bundle --minify --format=iife --target=es2020 --outfile=dist/demographic-widget.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0"
+  }
+}

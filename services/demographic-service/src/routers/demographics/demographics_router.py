@@ -122,6 +122,71 @@ def get_demographics_raw(
     return build_demographic_response(row)
 
 
+# Resolve a click (a lat/lng) to the province polygon that CONTAINS it, joining
+# the spatial sidecar (public.demographic_boundary) back to the wide demographic
+# row by the shared territory_name key. Bound params only (no interpolation); the
+# GIST index on geom backs ST_Contains. ST_Point takes (lng, lat) — x then y.
+AT_POINT_QUERY = text(
+    """
+    SELECT d.*
+    FROM demographic_boundary b
+    JOIN demographic d USING (territory_name)
+    WHERE ST_Contains(b.geom, ST_SetSRID(ST_Point(:lng, :lat), 4326))
+    LIMIT 1
+    """
+)
+
+# Has ANY boundary been loaded? Distinguishes "click fell outside every province"
+# (fall back to the national row) from "boundaries not seeded yet" (503).
+BOUNDARY_EXISTS_QUERY = text("SELECT 1 FROM demographic_boundary LIMIT 1")
+
+# National fallback profile for a click no province contains (e.g. out at sea).
+NATIONAL_QUERY = text(
+    "SELECT * FROM demographic WHERE level = 'national' LIMIT 1"
+)
+
+
+@demographics_router.get("/at-point", response_model=DataResponse)
+def get_demographics_at_point(
+    lat: float = Query(..., description="Latitude (WGS84)", examples=[40.9151]),
+    lng: float = Query(..., description="Longitude (WGS84)", examples=[15.4344]),
+):
+    """Resolve a map click to a Territory **by geometry**, and return its profile.
+
+    The host clicks a *comune* the demographic data does not carry; this finds the
+    province polygon that contains the point (e.g. a click in Calitri resolves to
+    Avellino) and answers with that province's profile. It is the spatial twin of
+    ``/raw``: ``/raw`` looks up by name, this one by ``ST_Contains``.
+
+    Falls back to the national row when no province contains the point (a click in
+    the sea). Answers ``503`` while ``demographic_boundary`` is empty (boundaries
+    not loaded yet — see db/README.md), so the caller can degrade to its manual
+    territory picker rather than mistaking it for "no data here"."""
+    with get_session_context() as session:
+        row = session.execute(
+            AT_POINT_QUERY, {"lat": lat, "lng": lng}
+        ).mappings().first()
+        if row is not None:
+            return build_demographic_response(row)
+
+        # No province contained the point. Tell apart an unseeded table (503) from
+        # a genuinely-outside click (national fallback, else 404).
+        if session.execute(BOUNDARY_EXISTS_QUERY).mappings().first() is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Province boundaries not loaded; run db/load_boundaries.py.",
+            )
+
+        national = session.execute(NATIONAL_QUERY).mappings().first()
+
+    if national is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No territory resolved for point ({lat}, {lng})",
+        )
+    return build_demographic_response(national)
+
+
 # Discovery list ordered by scale (province -> region -> macro_area ->
 # national), then by name within a level. The scale rank lives in the SQL so the
 # DB returns rows already ordered; the endpoint carries that order through.
@@ -157,9 +222,13 @@ def list_territories():
 
 @demographics_router.get("/ping")
 def ping():
-    """Placeholder endpoint behind the ``demographics:read`` guard.
+    """Auth-and-reachability probe behind the ``demographics:read`` guard.
 
-    Task 03 replaces/extends this with the real read endpoints under the same
-    router-level guard.
+    The only DB-free endpoint inside the guarded router, kept deliberately: the
+    auth test suite targets it (``PROTECTED = "/demographics/ping"``) and it is
+    the documented gateway reachability smoke — a ``demographics:read`` token
+    returns 200 through the gateway *without* seeding the database. The real read
+    endpoints (``/raw``, ``/at-point``, ``/territories``) all hit the DB, so they
+    cannot stand in for that check.
     """
     return {"status": "ok"}

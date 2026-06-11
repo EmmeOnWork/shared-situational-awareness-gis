@@ -4,3 +4,8 @@ __pycache__/
 .venv/
 venv/
 .env
+
+# Built UI bundle (produced by `make ui` / the Dockerfile Node stage)
+src/static/
+ui/dist/
+ui/node_modules/
