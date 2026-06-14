@@ -135,7 +135,11 @@ const STYLES = `
     .modal-card { width: 100%; max-width: 320px; max-height: 100%; overflow-y: auto; text-align: left; box-sizing: border-box;
                   background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; padding: 14px; }
     .modal-card h3 { margin: 0 0 10px; font-size: 14px; color: #ffffff; }
-    .modal-card .actions { display: flex; justify-content: flex-end; margin-top: 12px; }
+    .modal-card .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+    .confirm-card { max-width: 300px; }
+    .confirm-card .confirm-text { margin: 0; font-size: 13px; color: #cbd5e1; line-height: 1.5; }
+    .load.danger { border-color: rgba(252,165,165,0.45); color: #fca5a5; }
+    .load.danger:hover { background: rgba(252,165,165,0.12); }
     .readout { display: flex; flex-direction: column; gap: 8px; }
     .readout .row { display: flex; flex-direction: column; gap: 1px; }
     .readout .k { font-size: 11px; color: #94a3b8; }
@@ -197,6 +201,7 @@ class CharacteristicWidget extends HTMLElement {
     private imageUrl?: string;
     private formOpen = false;
     private modalOpen = false; // the Scheda modal, opened by clicking the centre Blueprint
+    private confirmRemoveId?: number; // a Blueprint pending a Rimuovi confirmation (in-widget modal)
     private note?: string; // transient loading / error line for the WIDGET body
     private formNote?: string; // transient validation / save error, shown ONLY in the modal
     // The Load form's portal: a host appended to document.body so the form opens
@@ -289,6 +294,7 @@ class CharacteristicWidget extends HTMLElement {
         this.setImageUrl(undefined);
         this.formOpen = false;
         this.modalOpen = false;
+        this.confirmRemoveId = undefined; // drop a pending Rimuovi confirmation on Bene change
         this.note = undefined;
         this.formNote = undefined; // close the modal cleanly on save/Bene change
         this.blueprints = [];
@@ -362,8 +368,18 @@ class CharacteristicWidget extends HTMLElement {
             el.closest(".sezione-row")?.remove();
         } else if (action === "submit") {
             void this.submitUpload();
-        } else if (action === "delete") {
-            void this.deleteBlueprint(Number(el.dataset.id));
+        } else if (action === "ask-remove") {
+            // Don't delete yet: open the in-widget confirmation modal first.
+            this.confirmRemoveId = Number(el.dataset.id);
+            this.render();
+        } else if (action === "confirm-remove") {
+            const id = this.confirmRemoveId;
+            this.confirmRemoveId = undefined;
+            if (id !== undefined && Number.isFinite(id)) void this.deleteBlueprint(id);
+        } else if (action === "cancel-remove") {
+            // Backdrop or Annulla: dismiss the confirmation, keep the Blueprint.
+            this.confirmRemoveId = undefined;
+            this.render();
         } else if (action === "open-modal") {
             this.modalOpen = true;
             this.modalZoom = 1; // open showing the whole plan, fit to the frame width
@@ -612,10 +628,12 @@ class CharacteristicWidget extends HTMLElement {
                     ${hasBlueprints ? `<div class="bar-side right">${this.renderSezioniSelect()}</div>` : ""}
                 </header>
                 <div class="body">${this.renderBody()}</div>
+                ${this.renderConfirmRemove()}
             </div>
         `;
         // Neither the Load form NOR the Scheda modal is in this markup — both live in
-        // fullpage portals on document.body.
+        // fullpage portals on document.body. The Rimuovi confirmation, by contrast, is
+        // an IN-WIDGET overlay (absolute, covers only this widget), rendered above.
         this.syncOverlay();
         this.syncSchedaModal();
     }
@@ -626,9 +644,33 @@ class CharacteristicWidget extends HTMLElement {
     // set once the first Sezione auto-loads).
     private renderControls(): string {
         const remove = this.selectedId
-            ? `<button type="button" class="load small remove" data-action="delete" data-id="${this.selectedId}">Rimuovi</button>`
+            ? `<button type="button" class="load small remove" data-action="ask-remove" data-id="${this.selectedId}">Rimuovi</button>`
             : "";
         return `<button type="button" class="load small" data-action="open-form">Modifica</button>${remove}`;
+    }
+
+    // The in-widget Rimuovi confirmation. Unlike the Load form / Scheda modal (fullpage
+    // portals on document.body), this stays INSIDE the widget: a `.modal` is
+    // `position: absolute; inset: 0`, so it overlays only this widget (`:host` is the
+    // positioning context). Empty markup when nothing is pending. The backdrop and
+    // Annulla cancel (cancel-remove); Rimuovi confirms (confirm-remove).
+    private renderConfirmRemove(): string {
+        if (this.confirmRemoveId === undefined) return "";
+        const bp = this.blueprints.find((b) => b.id === this.confirmRemoveId);
+        const name = bp?.sezione ?? "";
+        const sezione = name ? `«${escapeHtml(name)}»` : "questa planimetria";
+        return `
+            <div class="modal" data-action="cancel-remove">
+                <div class="modal-card confirm-card" data-action="noop">
+                    <h3>Rimuovere la planimetria?</h3>
+                    <p class="confirm-text">La sezione ${sezione} verrà eliminata definitivamente. L'operazione non è reversibile.</p>
+                    <div class="actions">
+                        <button type="button" class="load ghost" data-action="cancel-remove">Annulla</button>
+                        <button type="button" class="load danger" data-action="confirm-remove">Rimuovi</button>
+                    </div>
+                </div>
+            </div>
+        `;
     }
 
     // State 3's right-hand control: the Sezioni as a dropdown (the selected one is the

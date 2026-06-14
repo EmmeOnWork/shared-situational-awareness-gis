@@ -51,7 +51,17 @@ def widget_bundle():
             status_code=503,
             content={"detail": "UI bundle not built; run `make ui`."},
         )
-    return FileResponse(WIDGET_BUNDLE, media_type="application/javascript")
+    # ``no-cache`` = the browser must REVALIDATE with the server before reusing a
+    # cached copy, so it can never serve a stale widget after a redeploy. Without it
+    # the bundle carries no freshness directive, so browsers cache it heuristically
+    # and keep serving the OLD widget — even in incognito within a session (the bug
+    # we hit). A bare FileResponse doesn't emit 304s, so revalidation re-sends the
+    # full bundle; at ~26 KB that's negligible and worth the guaranteed freshness.
+    return FileResponse(
+        WIDGET_BUNDLE,
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 # The characteristic routes are guarded by a single router-level dependency. v1 is
