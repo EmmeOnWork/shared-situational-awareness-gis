@@ -98,18 +98,25 @@ def test_gateway_upstreams_are_injected_as_compose_service_names():
 
     env = compose_env(gateway)
     demographic_name, _ = compose_service_built_from(compose, "demographic-service")
+    characteristic_name, _ = compose_service_built_from(compose, "characteristic-service")
     backend_name, _ = compose_service_built_from(compose, "monolith/backend")
     frontend_name, _ = compose_service_built_from(compose, "monolith/frontend")
 
     # Each upstream the gateway interpolates points at the matching component's
     # compose service name — resolved server-to-server on the internal network.
     assert _upstream_host(env["DEMOGRAPHIC_UPSTREAM"]) == demographic_name
+    assert _upstream_host(env["CHARACTERISTIC_UPSTREAM"]) == characteristic_name
     assert _upstream_host(env["MONOLITH_UPSTREAM"]) == backend_name
     assert _upstream_host(env["FRONTEND_UPSTREAM"]) == frontend_name
 
     # ...and every upstream host is genuinely a service in this compose (a real
     # internal name), never an external/hard-coded address.
-    for var in ("DEMOGRAPHIC_UPSTREAM", "MONOLITH_UPSTREAM", "FRONTEND_UPSTREAM"):
+    for var in (
+        "DEMOGRAPHIC_UPSTREAM",
+        "CHARACTERISTIC_UPSTREAM",
+        "MONOLITH_UPSTREAM",
+        "FRONTEND_UPSTREAM",
+    ):
         assert _upstream_host(env[var]) in service_names
 
 

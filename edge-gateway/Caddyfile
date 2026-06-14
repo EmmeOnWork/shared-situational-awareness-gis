@@ -34,6 +34,16 @@
 	# its routes under /demographics), and the upstream is never hard-coded.
 	reverse_proxy /demographics* {$DEMOGRAPHIC_UPSTREAM}
 
+	# /characteristic → characteristic-service (write Widget: Scheda + Blueprints).
+	# Path is preserved (the service mounts its routes and its bundle under
+	# /characteristic), and the upstream is injected per-environment.
+	reverse_proxy /characteristic* {$CHARACTERISTIC_UPSTREAM}
+
+	# /reuse → reuse-service (Workshop Selector: owns the building_workshop registry,
+	# serves the Bene toggle-list and its bundle under /reuse). Path is preserved and
+	# the upstream is injected per-environment.
+	reverse_proxy /reuse* {$REUSE_UPSTREAM}
+
 	# Registering a Widget is THIS — one route line, claiming a fresh top-level
 	# prefix above the frontend catch-all. /geo-layers is the worked example: a new
 	# layers-style service. Strangling a route off the monolith is the same one-line

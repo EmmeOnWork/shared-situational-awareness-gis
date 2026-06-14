@@ -20,6 +20,8 @@ services:
       # names resolved on the internal network — the SAME Caddyfile, different
       # addresses (ADR-0002, Module 2). No second copy of the routing logic.
       DEMOGRAPHIC_UPSTREAM: "http://demographic-service:28001"
+      CHARACTERISTIC_UPSTREAM: "http://characteristic-service:28002"
+      REUSE_UPSTREAM: "http://reuse-service:28002"
       MONOLITH_UPSTREAM: "http://ju-backend:8000"
       FRONTEND_UPSTREAM: "http://janus-dashboard-ui:3000"
     volumes:
@@ -28,6 +30,8 @@ services:
       - ./edge-gateway/Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:
       - demographic-service
+      - characteristic-service
+      - reuse-service
       - ju-backend
       - janus-dashboard-ui
     networks:
@@ -91,6 +95,95 @@ services:
     networks:
       - janus-net
     restart: "no"
+
+  characteristic-service:
+    build:
+      context: ./services/characteristic-service
+      dockerfile: Dockerfile
+    # No published ports: reachable only through the gateway (ADR-0002).
+    environment:
+      # Shared DB (ADR-0001); lazily connected, so /health and /characteristic/ping
+      # answer even before it is reachable. The fallback below is the SAME local
+      # value as .env.example, so a no-.env first boot already works; a real .env
+      # (or the Supabase pooler URL) overrides it. This service issues DML against
+      # its building_* tables — the characteristic-schema-init one-shot grants the
+      # janus role the needed INSERT/UPDATE/DELETE.
+      DATABASE_URL: "${DATABASE_URL:-postgresql+psycopg://janus:CHANGE_ME@ju-postgres:5432/janus}"
+      # Dev JWT verification: lets the documented reachability smoke mint a token
+      # the service verifies, so /characteristic/ping returns 200 through the
+      # gateway. The monolith issues real tokens in staging/prod; this HS256 key is
+      # local-only, not a secret.
+      JWT_ALGORITHM: "${JWT_ALGORITHM:-HS256}"
+      JWT_VERIFICATION_KEY: "${JWT_VERIFICATION_KEY:-CHANGE_ME}"
+    depends_on:
+      ju-postgres:
+        condition: service_healthy
+      characteristic-schema-init:
+        condition: service_completed_successfully
+    networks:
+      - janus-net
+    restart: unless-stopped
+
+  # One-shot: ensures the characteristic widget's *schema* exists (the three empty
+  # building_* tables) AND grants the service's DB role INSERT/UPDATE/DELETE on
+  # them — unlike the read-only demographic service, this one issues DML. Applied
+  # on every bring-up, idempotent (CREATE TABLE IF NOT EXISTS; grants re-asserted),
+  # loads NO data. Kept out of the service runtime on purpose: the schema comes up
+  # with the compose, not from the app. Reuses the postgres image already pulled
+  # for ju-postgres, so no extra download.
+  characteristic-schema-init:
+    image: postgis/postgis:17-3.5
+    depends_on:
+      ju-postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-CHANGE_ME}
+    entrypoint: ["psql"]
+    command:
+      - "-h"
+      - "ju-postgres"
+      - "-U"
+      - "${POSTGRES_USER:-janus}"
+      - "-d"
+      - "${POSTGRES_DB:-janus}"
+      - "-v"
+      - "ON_ERROR_STOP=1"
+      - "-v"
+      - "service_role=${POSTGRES_USER:-janus}"
+      - "-f"
+      - "/schema/characteristic-schema.sql"
+    volumes:
+      - ./services/characteristic-service/db/characteristic-schema.sql:/schema/characteristic-schema.sql:ro
+    networks:
+      - janus-net
+    restart: "no"
+
+  reuse-service:
+    build:
+      context: ./services/reuse-service
+      dockerfile: Dockerfile
+    # No published ports: reachable only through the gateway (ADR-0002).
+    environment:
+      # Shared DB (ADR-0001); lazily connected, so /health and /reuse/widget.js
+      # answer even before it is reachable. The fallback below is the SAME local
+      # value as .env.example, so a no-.env first boot already works; a real .env
+      # (or the Supabase pooler URL) overrides it. Unlike the characteristic
+      # service, this one needs NO schema-init one-shot: it best-effort ensures its
+      # own public.building_workshop registry on boot (src/config/workshop_registry.py),
+      # then self-registers in the shared "Add widget" catalog.
+      DATABASE_URL: "${DATABASE_URL:-postgresql+psycopg://janus:CHANGE_ME@ju-postgres:5432/janus}"
+      # Dev JWT verification: lets the documented reachability smoke mint a token
+      # the service verifies, so /reuse/benes returns 200 through the gateway. The
+      # monolith issues real tokens in staging/prod; this HS256 key is local-only,
+      # not a secret.
+      JWT_ALGORITHM: "${JWT_ALGORITHM:-HS256}"
+      JWT_VERIFICATION_KEY: "${JWT_VERIFICATION_KEY:-CHANGE_ME}"
+    depends_on:
+      ju-postgres:
+        condition: service_healthy
+    networks:
+      - janus-net
+    restart: unless-stopped
 
   ju-backend:
     build:

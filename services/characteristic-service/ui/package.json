@@ -1,0 +1,15 @@
+{
+  "name": "characteristic-widget-ui",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Self-contained UI bundle (custom element <characteristic-widget>) for the characteristic widget service.",
+  "scripts": {
+    "build": "esbuild src/characteristic-widget.ts --bundle --minify --format=iife --target=es2020 --outfile=dist/characteristic-widget.js",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"src/**/*.test.ts\""
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0"
+  }
+}

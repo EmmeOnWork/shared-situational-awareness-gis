@@ -50,6 +50,19 @@ def test_demographics_prefix_routes_to_demographic_upstream(echo_upstream, gatew
     assert resp.json()["upstream"] == "demographic-service"
 
 
+def test_characteristic_prefix_routes_to_characteristic_upstream(echo_upstream, gateway):
+    """ACCEPTANCE: a real request for the /characteristic prefix, sent to the live
+    gateway, is answered by the characteristic-service upstream — the write Widget
+    is reachable only through the single front door (ADR-0002), and its bundle
+    route (/characteristic/widget.js) rides the same prefix."""
+    characteristic = echo_upstream("characteristic-service")
+    gw = gateway({"CHARACTERISTIC_UPSTREAM": characteristic.address})
+
+    resp = httpx.get(f"{gw}/characteristic/ping")
+
+    assert resp.json()["upstream"] == "characteristic-service"
+
+
 def test_demographic_upstream_address_comes_from_env_not_hardcoded(
     echo_upstream, gateway
 ):
