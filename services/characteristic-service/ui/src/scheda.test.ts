@@ -12,7 +12,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { isSchedaEmpty, buildSchedaPayload, type Scheda } from "./scheda.ts";
+import { isSchedaEmpty, buildSchedaPayload, SCHEDA_FIELDS, type Scheda } from "./scheda.ts";
+
+test("destinazione_uso is labelled 'Destinazione d'uso (attuale)' (key unchanged)", () => {
+    const field = SCHEDA_FIELDS.find((f) => f.name === "destinazione_uso");
+    assert.ok(field, "destinazione_uso must stay in the Scheda field catalog");
+    assert.equal(field.label, "Destinazione d'uso (attuale)");
+});
 
 test("isSchedaEmpty is true for a null Scheda (never filled)", () => {
     assert.equal(isSchedaEmpty(null), true);

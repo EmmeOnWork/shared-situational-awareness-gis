@@ -39,6 +39,27 @@ export const VINCOLI_VALUES = [
     "altro",
 ] as const;
 
+/** The Scheda's free-text + enum fields, in form order. ``vincoli`` is handled
+ *  separately (a checkbox group), so it is intentionally absent here. Drives both
+ *  the Load form's inputs and the modal read-out, so the two never drift —
+ *  ``destinazione_uso`` reads "(attuale)" to mark a building's current/legal use,
+ *  distinct from a Vocazione's new possible use. */
+export const SCHEDA_FIELDS: ReadonlyArray<{ name: keyof Scheda; label: string; enum?: readonly string[] }> = [
+    { name: "denominazione", label: "Denominazione" },
+    { name: "destinazione_uso", label: "Destinazione d'uso (attuale)" },
+    { name: "titolo", label: "Titolo di disponibilità", enum: TITOLO_VALUES },
+    { name: "titolo_estremi", label: "Estremi del titolo" },
+    { name: "stato_uso", label: "Stato d'uso", enum: STATO_USO_VALUES },
+    { name: "condizioni", label: "Condizioni", enum: CONDIZIONI_VALUES },
+    { name: "stato_descrizione", label: "Descrizione dello stato" },
+    { name: "vincoli_note", label: "Note sui vincoli" },
+    { name: "foglio", label: "Foglio (catasto)" },
+    { name: "particella", label: "Particella (catasto)" },
+    { name: "referente_nome", label: "Referente — nome" },
+    { name: "referente_email", label: "Referente — email" },
+    { name: "referente_tel", label: "Referente — telefono" },
+];
+
 /**
  * State 4: a Scheda is "empty" when it was never filled (``null``) or every field is
  * blank / an empty array. The modal then shows "non disponibile" instead of blank

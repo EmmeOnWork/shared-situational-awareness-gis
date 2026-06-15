@@ -1,5 +1,9 @@
 # Active Workshop selection travels on a shared-`window` event bus
 
+_Extended by [ADR-0005](./0005-generalize-selection-bus.md): the bus is generalized to
+multiple selection axes (`praim:selection:<axis>` + `window.__praimSelections`); the
+Workshop axis described below migrates to that contract in a later, separate change._
+
 A **Workshop Selector** widget needs to tell other ("sensitive") widgets — the
 first being `building_characteristic` — which reuse POI (Bene) is currently under
 consideration (the **Active Workshop**). We broadcast it as a browser

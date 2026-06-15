@@ -28,10 +28,9 @@ import { readActiveWorkshop, subscribeActiveWorkshop, type ActiveWorkshop } from
 import {
     buildSchedaPayload,
     isSchedaEmpty,
+    SCHEDA_FIELDS,
     type Scheda,
     TITOLO_VALUES,
-    STATO_USO_VALUES,
-    CONDIZIONI_VALUES,
     VINCOLI_VALUES,
 } from "./scheda";
 
@@ -55,25 +54,6 @@ interface SezioneDraft {
     sezione: string;
     file: File | null;
 }
-
-/** The Scheda's free-text + enum fields, in form order. ``vincoli`` is handled
- *  separately (a checkbox group), so it is intentionally absent here. Drives both
- *  the Load form's inputs and the modal read-out, so the two never drift. */
-const SCHEDA_FIELDS: ReadonlyArray<{ name: keyof Scheda; label: string; enum?: readonly string[] }> = [
-    { name: "denominazione", label: "Denominazione" },
-    { name: "destinazione_uso", label: "Destinazione d'uso" },
-    { name: "titolo", label: "Titolo di disponibilità", enum: TITOLO_VALUES },
-    { name: "titolo_estremi", label: "Estremi del titolo" },
-    { name: "stato_uso", label: "Stato d'uso", enum: STATO_USO_VALUES },
-    { name: "condizioni", label: "Condizioni", enum: CONDIZIONI_VALUES },
-    { name: "stato_descrizione", label: "Descrizione dello stato" },
-    { name: "vincoli_note", label: "Note sui vincoli" },
-    { name: "foglio", label: "Foglio (catasto)" },
-    { name: "particella", label: "Particella (catasto)" },
-    { name: "referente_nome", label: "Referente — nome" },
-    { name: "referente_email", label: "Referente — email" },
-    { name: "referente_tel", label: "Referente — telefono" },
-];
 
 const STYLES = `
     :host { display: block; position: relative; height: 100%; font-family: system-ui, sans-serif; color: #f9fafb; }

@@ -17,6 +17,12 @@ the monolith's code. Each Widget owns its own language.
   publishes the **Active Workshop** that sensitive widgets react to. It is the
   POI-granular realisation of the "Selection layer" the Demographic context
   anticipated but left unbuilt.
+- [Vocazione Selector](./services/vocazione-service/CONTEXT.md) (`vocazione-service`)
+  — a **stores-nothing** selector Widget: a dropdown of the 16 fixed **Vocazioni**
+  (target reuse archetypes) that publishes the **Active Vocazione** page-globally so
+  a future map layer and other widgets can re-scope. A *second* selection axis
+  alongside the Active Workshop — *which kind of reuse*, not *which Bene*. Owns no
+  tables and no data route.
 
 ## Relationships
 
@@ -36,6 +42,16 @@ the monolith's code. Each Widget owns its own language.
   transport mechanism is being decided (see the Building Characteristic context);
   Building Characteristic depends only on *the contract* (an Active Workshop
   `poiId`), never on the Selector's internals.
+- **Vocazione Selector → future consumers (Active Vocazione)**: the Selector
+  publishes the chosen **Vocazione** on the **generalized selection bus** (ADR-0005:
+  `praim:selection:<axis>` + retained `window.__praimSelections`), as an independent
+  axis alongside the Active Workshop — realising the "two independent selections"
+  case ADR-0003 anticipated. The Vocazione axis ships on this contract now; the
+  Workshop axis migrates to it in a later, separate change (two conventions coexist
+  meanwhile). There is **no stored building→Vocazione link**, so the map layer that
+  would filter buildings by Vocazione is deferred; the Selector only guarantees a
+  consumable broadcast. Touches the Building Characteristic context only to relabel
+  its Scheda `destinazione_uso` as "(attuale)".
 
 ## System-wide decisions
 

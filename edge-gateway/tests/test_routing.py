@@ -63,6 +63,21 @@ def test_characteristic_prefix_routes_to_characteristic_upstream(echo_upstream, 
     assert resp.json()["upstream"] == "characteristic-service"
 
 
+def test_vocazione_prefix_routes_to_vocazione_upstream(echo_upstream, gateway):
+    """ACCEPTANCE (vocazione slice 1): a real request for the /vocazione prefix,
+    sent to the live gateway, is answered by the vocazione-service upstream — the
+    selector Widget is reachable only through the single front door (ADR-0002),
+    and its unguarded bundle route (/vocazione/widget.js) rides the same prefix.
+    This Widget has no data route, so the prefix carries only /health-style and
+    bundle traffic."""
+    vocazione = echo_upstream("vocazione-service")
+    gw = gateway({"VOCAZIONE_UPSTREAM": vocazione.address})
+
+    resp = httpx.get(f"{gw}/vocazione/widget.js")
+
+    assert resp.json()["upstream"] == "vocazione-service"
+
+
 def test_demographic_upstream_address_comes_from_env_not_hardcoded(
     echo_upstream, gateway
 ):

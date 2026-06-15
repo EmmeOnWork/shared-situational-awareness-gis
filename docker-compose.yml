@@ -22,6 +22,7 @@ services:
       DEMOGRAPHIC_UPSTREAM: "http://demographic-service:28001"
       CHARACTERISTIC_UPSTREAM: "http://characteristic-service:28002"
       REUSE_UPSTREAM: "http://reuse-service:28002"
+      VOCAZIONE_UPSTREAM: "http://vocazione-service:28003"
       MONOLITH_UPSTREAM: "http://ju-backend:8000"
       FRONTEND_UPSTREAM: "http://janus-dashboard-ui:3000"
     volumes:
@@ -32,6 +33,7 @@ services:
       - demographic-service
       - characteristic-service
       - reuse-service
+      - vocazione-service
       - ju-backend
       - janus-dashboard-ui
     networks:
@@ -178,6 +180,26 @@ services:
       # not a secret.
       JWT_ALGORITHM: "${JWT_ALGORITHM:-HS256}"
       JWT_VERIFICATION_KEY: "${JWT_VERIFICATION_KEY:-CHANGE_ME}"
+    depends_on:
+      ju-postgres:
+        condition: service_healthy
+    networks:
+      - janus-net
+    restart: unless-stopped
+
+  vocazione-service:
+    build:
+      context: ./services/vocazione-service
+      dockerfile: Dockerfile
+    # No published ports: reachable only through the gateway (ADR-0002).
+    environment:
+      # Shared DB (ADR-0001); lazily connected, so /health and /vocazione/widget.js
+      # answer even before it is reachable. The fallback below is the SAME local
+      # value as the siblings, so a no-.env first boot already works; a real .env
+      # (or the Supabase pooler URL) overrides it. The DB is used ONLY for the
+      # best-effort catalog self-registration — this Widget owns no tables and has
+      # no data route, so there is NO JWT config here (it verifies nothing).
+      DATABASE_URL: "${DATABASE_URL:-postgresql+psycopg://janus:CHANGE_ME@ju-postgres:5432/janus}"
     depends_on:
       ju-postgres:
         condition: service_healthy

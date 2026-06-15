@@ -44,6 +44,12 @@
 	# the upstream is injected per-environment.
 	reverse_proxy /reuse* {$REUSE_UPSTREAM}
 
+	# /vocazione → vocazione-service (Vocazione Selector: a client-only Widget that
+	# owns no data route — it serves only its bundle under /vocazione/widget.js and
+	# self-registers in the catalog). Path is preserved and the upstream is injected
+	# per-environment.
+	reverse_proxy /vocazione* {$VOCAZIONE_UPSTREAM}
+
 	# Registering a Widget is THIS — one route line, claiming a fresh top-level
 	# prefix above the frontend catch-all. /geo-layers is the worked example: a new
 	# layers-style service. Strangling a route off the monolith is the same one-line
