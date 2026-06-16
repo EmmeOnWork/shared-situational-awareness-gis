@@ -23,6 +23,13 @@ the monolith's code. Each Widget owns its own language.
   a future map layer and other widgets can re-scope. A *second* selection axis
   alongside the Active Workshop — *which kind of reuse*, not *which Bene*. Owns no
   tables and no data route.
+- [Realtime Notifier](./services/notification-service/CONTEXT.md) (`notification-service`;
+  *in design*) — a **stateless / ephemeral** realtime Widget (prefix `/notifications`)
+  that holds an authenticated WebSocket and renders **self-describing Notifications**
+  (top-right toast + audio) pushed from the server. It is a generic *delivery surface*:
+  it understands only **Severity** + an optional **Scope**, never a domain event type.
+  The **Round** logic that produces these Notifications is a separate, future widget
+  (Round Manager, out of scope). Owns no tables.
 
 ## Relationships
 
@@ -42,6 +49,13 @@ the monolith's code. Each Widget owns its own language.
   transport mechanism is being decided (see the Building Characteristic context);
   Building Characteristic depends only on *the contract* (an Active Workshop
   `poiId`), never on the Selector's internals.
+- **Realtime Notifier → all widgets (transport split)**: the Notifier is the first
+  **server→many-clients** transport (WebSocket behind the gateway, ADR-0002's realtime
+  auth convention), distinct from the in-page **selection bus** (ADR-0003/0005, one
+  browser only). It carries generic **Notifications** (Severity + optional Scope); the
+  future **Round Manager** is the *producer* of round-derived Notifications. The Notifier
+  reuses the selection bus only to *filter* a scoped Notification client-side against the
+  receiver's **Active Workshop** — never as server-side rooms.
 - **Vocazione Selector → future consumers (Active Vocazione)**: the Selector
   publishes the chosen **Vocazione** on the **generalized selection bus** (ADR-0005:
   `praim:selection:<axis>` + retained `window.__praimSelections`), as an independent

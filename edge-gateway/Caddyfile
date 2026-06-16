@@ -50,6 +50,13 @@
 	# per-environment.
 	reverse_proxy /vocazione* {$VOCAZIONE_UPSTREAM}
 
+	# /notifications → notification-service (Realtime Notifier: a page-global
+	# overlay Widget that serves its bundle under /notifications/widget.js and,
+	# in a later slice, holds the authenticated WebSocket). Path is preserved and
+	# the upstream is injected per-environment. No special config is needed for the
+	# WebSocket upgrade — Caddy reverse_proxy carries upgrades on every route.
+	reverse_proxy /notifications* {$NOTIFICATIONS_UPSTREAM}
+
 	# Registering a Widget is THIS — one route line, claiming a fresh top-level
 	# prefix above the frontend catch-all. /geo-layers is the worked example: a new
 	# layers-style service. Strangling a route off the monolith is the same one-line

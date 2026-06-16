@@ -1,0 +1,18 @@
+"use strict";(()=>{var d={info:"#2563eb",warning:"#d97706",success:"#16a34a"};function f(s,t){return`${s.replace(/^http/,"ws")}/notifications/ws?access_token=${encodeURIComponent(t)}`}function p(s){let t;try{t=JSON.parse(s)}catch{return null}if(typeof t!="object"||t===null)return null;let{severity:e,title:n,body:o,scope:i}=t;if(e!=="info"&&e!=="warning"&&e!=="success"||typeof n!="string"||typeof o!="string")return null;let r={severity:e,title:n,body:o};if(i!==void 0){if(typeof i!="object"||i===null)return null;let{axis:a,value:c}=i;if(typeof a!="string"||typeof c!="string")return null;r.scope={axis:a,value:c}}return r}function g(s){return y[s]}var y={info:[{freq:660,startMs:0,durationMs:180}],warning:[{freq:520,startMs:0,durationMs:140},{freq:520,startMs:200,durationMs:140}],success:[{freq:523,startMs:0,durationMs:150},{freq:659,startMs:150,durationMs:150},{freq:784,startMs:300,durationMs:220}]},l=class{constructor(t=document){this.target=t,this.target.addEventListener("click",()=>this.unlock(),{once:!0})}unlock(){try{this.ctx??(this.ctx=new AudioContext),this.ctx.resume()}catch{}}play(t){let e=this.ctx;if(!e||e.state!=="running")return;let n=e.currentTime;for(let o of g(t)){let i=e.createOscillator(),r=e.createGain();i.type="sine",i.frequency.value=o.freq;let a=n+o.startMs/1e3,c=a+o.durationMs/1e3;r.gain.setValueAtTime(1e-4,a),r.gain.exponentialRampToValueAtTime(.2,a+.01),r.gain.exponentialRampToValueAtTime(1e-4,c),i.connect(r).connect(e.destination),i.start(a),i.stop(c+.02)}}};function m(s,t){let e=s.scope;return e?t==null?!1:e.value===t:!0}function v(s,t=window){return t.__praimSelections?.[s]}var x=5e3;function h(s){let t=v(s);return t==null?t:typeof t=="object"&&"poiId"in t?String(t.poiId):String(t)}var u=class extends HTMLElement{constructor(){super();this.audio=new l;this.root=this.attachShadow({mode:"open"})}static get observedAttributes(){return["token","base"]}connectedCallback(){this.root.innerHTML=`
+            <style>
+                :host { display: contents; }
+                .stack {
+                    position: fixed; top: 1rem; right: 1rem; z-index: 2147483647;
+                    display: flex; flex-direction: column; gap: .5rem;
+                    pointer-events: none; font-family: system-ui, sans-serif;
+                }
+                .toast {
+                    pointer-events: auto; min-width: 16rem; max-width: 22rem;
+                    color: #fff; border-radius: .5rem; padding: .75rem 1rem;
+                    box-shadow: 0 4px 12px rgba(0,0,0,.25);
+                }
+                .toast .title { font-weight: 600; }
+                .toast .body { font-size: .9rem; opacity: .95; margin-top: .15rem; }
+            </style>
+            <div class="stack" role="status" aria-live="polite"></div>
+        `,this.toasts=this.root.querySelector(".stack"),this.connect()}disconnectedCallback(){this.socket?.close()}attributeChangedCallback(){this.isConnected&&this.connect()}connect(){let e=this.getAttribute("token")??"",n=this.getAttribute("base")||window.location.origin;this.socket?.close(),this.socket=new WebSocket(f(n,e)),this.socket.addEventListener("message",o=>this.onMessage(o))}onMessage(e){let n=p(String(e.data));if(!n)return;let o=n.scope?h(n.scope.axis):void 0;m(n,o)&&(this.renderToast(n),this.audio.play(n.severity))}renderToast(e){let n=document.createElement("div");n.className="toast",n.style.background=d[e.severity];let o=document.createElement("div");o.className="title",o.textContent=e.title;let i=document.createElement("div");i.className="body",i.textContent=e.body,n.append(o,i),this.toasts.append(n),setTimeout(()=>n.remove(),x)}};customElements.get("notification-overlay")||customElements.define("notification-overlay",u);})();

@@ -23,6 +23,7 @@ services:
       CHARACTERISTIC_UPSTREAM: "http://characteristic-service:28002"
       REUSE_UPSTREAM: "http://reuse-service:28002"
       VOCAZIONE_UPSTREAM: "http://vocazione-service:28003"
+      NOTIFICATIONS_UPSTREAM: "http://notification-service:28004"
       MONOLITH_UPSTREAM: "http://ju-backend:8000"
       FRONTEND_UPSTREAM: "http://janus-dashboard-ui:3000"
     volumes:
@@ -34,6 +35,7 @@ services:
       - characteristic-service
       - reuse-service
       - vocazione-service
+      - notification-service
       - ju-backend
       - janus-dashboard-ui
     networks:
@@ -200,6 +202,36 @@ services:
       # best-effort catalog self-registration — this Widget owns no tables and has
       # no data route, so there is NO JWT config here (it verifies nothing).
       DATABASE_URL: "${DATABASE_URL:-postgresql+psycopg://janus:CHANGE_ME@ju-postgres:5432/janus}"
+    depends_on:
+      ju-postgres:
+        condition: service_healthy
+    networks:
+      - janus-net
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    # No published ports: reachable only through the gateway (ADR-0002). The
+    # gateway already passes WebSocket upgrades through on every proxied route, so
+    # the later authenticated-WS slice needs no compose/Caddyfile change.
+    environment:
+      # Shared DB (ADR-0001); lazily connected, so /health and
+      # /notifications/widget.js answer even before it is reachable. The fallback
+      # below is the SAME local value as the siblings, so a no-.env first boot
+      # already works; a real .env (or the Supabase pooler URL) overrides it. The
+      # DB is used ONLY for the best-effort catalog self-registration — this
+      # Widget owns no tables and has no data route.
+      DATABASE_URL: "${DATABASE_URL:-postgresql+psycopg://janus:CHANGE_ME@ju-postgres:5432/janus}"
+      # WS-handshake auth (slice 3, ADR-0002): the WebSocket endpoint verifies the
+      # monolith JWT, so this service needs the SAME verification key + algorithm
+      # the monolith signs with — identical to the sibling Widgets. Without it every
+      # handshake is refused (the RS256/empty-key default cannot verify the
+      # monolith's HS256 token), so no overlay ever stays connected and a publish's
+      # `delivered` count is always 0.
+      JWT_ALGORITHM: "${JWT_ALGORITHM:-HS256}"
+      JWT_VERIFICATION_KEY: "${JWT_VERIFICATION_KEY:-CHANGE_ME}"
     depends_on:
       ju-postgres:
         condition: service_healthy
