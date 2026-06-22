@@ -57,6 +57,13 @@
 	# WebSocket upgrade — Caddy reverse_proxy carries upgrades on every route.
 	reverse_proxy /notifications* {$NOTIFICATIONS_UPSTREAM}
 
+	# /rounds → round-service (Round Manager: the first stateful, multi-user,
+	# realtime-shared Widget — owns tables and its own authenticated per-Bene
+	# WebSocket). Serves its routes and its bundle under /rounds; the upstream is
+	# injected per-environment. Caddy carries the WebSocket upgrade on every route,
+	# so the later WS slice needs no Caddyfile change.
+	reverse_proxy /rounds* {$ROUND_UPSTREAM}
+
 	# Registering a Widget is THIS — one route line, claiming a fresh top-level
 	# prefix above the frontend catch-all. /geo-layers is the worked example: a new
 	# layers-style service. Strangling a route off the monolith is the same one-line

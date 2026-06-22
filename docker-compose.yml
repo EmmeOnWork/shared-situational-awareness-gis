@@ -24,6 +24,7 @@ services:
       REUSE_UPSTREAM: "http://reuse-service:28002"
       VOCAZIONE_UPSTREAM: "http://vocazione-service:28003"
       NOTIFICATIONS_UPSTREAM: "http://notification-service:28004"
+      ROUND_UPSTREAM: "http://round-service:28005"
       MONOLITH_UPSTREAM: "http://ju-backend:8000"
       FRONTEND_UPSTREAM: "http://janus-dashboard-ui:3000"
     volumes:
@@ -36,6 +37,7 @@ services:
       - reuse-service
       - vocazione-service
       - notification-service
+      - round-service
       - ju-backend
       - janus-dashboard-ui
     networks:
@@ -238,6 +240,69 @@ services:
     networks:
       - janus-net
     restart: unless-stopped
+
+  round-service:
+    build:
+      context: ./services/round-service
+      dockerfile: Dockerfile
+    # No published ports: reachable only through the gateway (ADR-0002). The
+    # gateway already passes WebSocket upgrades through on every proxied route, so
+    # the later authenticated per-Bene WS slice needs no compose/Caddyfile change.
+    environment:
+      # Shared DB (ADR-0001); lazily connected, so /health and /rounds/widget.js
+      # answer even before it is reachable. The fallback below is the SAME local
+      # value as the siblings, so a no-.env first boot already works; a real .env
+      # (or the Supabase pooler URL) overrides it. The recap persists each closed
+      # Round's outcome to public.round_outcomes (best-effort DML); the table+grant
+      # come up with the round-schema-init one-shot below, never from the app.
+      DATABASE_URL: "${DATABASE_URL:-postgresql+psycopg://janus:CHANGE_ME@ju-postgres:5432/janus}"
+      # Dev JWT verification: lets the documented reachability smoke mint a token
+      # the service verifies, so /rounds/ping returns 200 through the gateway. The
+      # monolith issues real tokens in staging/prod; this HS256 key is local-only,
+      # not a secret.
+      JWT_ALGORITHM: "${JWT_ALGORITHM:-HS256}"
+      JWT_VERIFICATION_KEY: "${JWT_VERIFICATION_KEY:-CHANGE_ME}"
+    depends_on:
+      ju-postgres:
+        condition: service_healthy
+      round-schema-init:
+        condition: service_completed_successfully
+    networks:
+      - janus-net
+    restart: unless-stopped
+
+  # One-shot: ensures the Round Manager's durable record exists (the empty
+  # round_outcomes table) AND grants the service's DB role INSERT/UPDATE/SELECT on
+  # it — the recap writes the closed Round's outcome. Applied on every bring-up,
+  # idempotent (CREATE TABLE IF NOT EXISTS; grant re-asserted), loads NO data. Kept
+  # out of the service runtime on purpose (schema comes up with the compose, not
+  # the app). Reuses the postgres image already pulled for ju-postgres.
+  round-schema-init:
+    image: postgis/postgis:17-3.5
+    depends_on:
+      ju-postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-CHANGE_ME}
+    entrypoint: ["psql"]
+    command:
+      - "-h"
+      - "ju-postgres"
+      - "-U"
+      - "${POSTGRES_USER:-janus}"
+      - "-d"
+      - "${POSTGRES_DB:-janus}"
+      - "-v"
+      - "ON_ERROR_STOP=1"
+      - "-v"
+      - "service_role=${POSTGRES_USER:-janus}"
+      - "-f"
+      - "/schema/round-schema.sql"
+    volumes:
+      - ./services/round-service/db/round-schema.sql:/schema/round-schema.sql:ro
+    networks:
+      - janus-net
+    restart: "no"
 
   ju-backend:
     build:

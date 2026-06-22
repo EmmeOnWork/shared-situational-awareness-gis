@@ -28,8 +28,18 @@ the monolith's code. Each Widget owns its own language.
   that holds an authenticated WebSocket and renders **self-describing Notifications**
   (top-right toast + audio) pushed from the server. It is a generic *delivery surface*:
   it understands only **Severity** + an optional **Scope**, never a domain event type.
-  The **Round** logic that produces these Notifications is a separate, future widget
-  (Round Manager, out of scope). Owns no tables.
+  The **Round** logic that produces these Notifications is a separate widget
+  ([Round Manager](./services/round-service/CONTEXT.md), now in design). Owns no tables.
+- [Round Manager](./services/round-service/CONTEXT.md) (`round-service`; prefix
+  `/rounds`, *in design*) — the **first stateful, multi-user, realtime-shared** Widget:
+  it runs an iterative group **consensus process** over the current **Bene**, in which
+  every **Participant** casts one final, secret **Vote** for a **Vocazione** each
+  **Round**, deliberates anonymously in a per-Bene **Chat**, and the Round repeats until
+  **Consensus** (1 − normalized Shannon entropy) reaches 100% and a **winning Vocazione**
+  is decided. **Owns tables** (Participants, Roles, Rounds, Votes, Chat, raw outcome
+  distributions + timings) — unlike every prior Widget. Serves its **own WebSocket with
+  a per-Bene room** for live state, and is the server-side **producer** of round
+  Notifications to the Realtime Notifier.
 
 ## Relationships
 
@@ -66,6 +76,26 @@ the monolith's code. Each Widget owns its own language.
   would filter buildings by Vocazione is deferred; the Selector only guarantees a
   consumable broadcast. Touches the Building Characteristic context only to relabel
   its Scheda `destinazione_uso` as "(attuale)".
+- **Round Manager → Realtime Notifier (producer)**: the Round Manager's backend is the
+  automated *producer* the Notifier context anticipated — it POSTs round-lifecycle
+  Notifications (round closed `info`, new round `info`, consensus reached `success`),
+  each carrying the Bene's **Scope**, to the Notifier's publish ingress. A Vote carries
+  no Notification (local widget feedback only).
+- **Round Manager → Workshop Selector (Active Workshop, sensitive consumer)**: the Round
+  Manager *consumes* the Active Workshop to know which Bene's Round to show; every
+  per-Bene thing (WebSocket room, roster, Chat, Round history) keys off it. No Active
+  Workshop ⇒ empty state.
+- **Round Manager → Vocazione catalog (votes-on, no stored link)**: a **Vote** picks from
+  the same 16-Vocazione catalog the Vocazione Selector owns, but is a private ballot, not
+  the Active Vocazione. At 100% Consensus the **winning Vocazione** is kept **internal**
+  to the Round Manager (its own context ADR-0003) — it does **not** write the deferred
+  Bene→Vocazione link, leaving that boundary unchanged.
+- **Round Manager → Monolith (owns tables, a departure)**: unlike every prior Widget
+  (stores-nothing or single-client read/write), the Round Manager is **stateful,
+  multi-user and realtime-shared** and **owns tables** in the shared `public` schema
+  (Participants, Roles, Rounds, Votes, Chat, raw outcome distributions + timings). It
+  runs its **own per-Bene WebSocket** (its own context ADR-0001), the first server-side
+  shared mutable state in the stack — distinct from the Notifier's roomless broadcast.
 
 ## System-wide decisions
 
