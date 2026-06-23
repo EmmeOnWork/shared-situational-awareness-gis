@@ -54,16 +54,28 @@ test("each action sends exactly the message the RoomManager expects", () => {
     const client = new RoundClient({ send: (d: string) => sent.push(d) });
 
     client.join();
-    client.declareRole("tecnico");
     client.ready();
     client.start();
     client.vote("re-star-borgo");
 
     assert.deepEqual(sent.map((s) => JSON.parse(s)), [
         { type: "join" },
-        { type: "declare_role", role: "tecnico" },
         { type: "ready" },
         { type: "start" },
         { type: "vote", vocazione: "re-star-borgo" },
     ]);
+});
+
+test("an action clicked before the socket opens is buffered, then flushed on open", () => {
+    const sent: string[] = [];
+    // readyState 0 = CONNECTING: the user clicked before the handshake finished.
+    const socket = { readyState: 0, send: (d: string) => sent.push(d) };
+    const client = new RoundClient(socket);
+
+    client.join();
+    assert.deepEqual(sent, []); // nothing sent while still connecting
+
+    socket.readyState = 1; // OPEN
+    client.flush();
+    assert.deepEqual(sent.map((s) => JSON.parse(s)), [{ type: "join" }]);
 });

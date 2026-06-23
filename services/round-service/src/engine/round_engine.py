@@ -4,16 +4,22 @@ A deep, IO-free reducer over a Bene's consensus process. ``apply(state, event)``
 returns the next ``ProcessState`` and the lifecycle side-effects to emit; the room
 manager and persistence layers (not this module) turn those into WebSocket fan-out,
 DB writes and Notifier publishes. This slice (task 03) covers the lobby events that
-form the roster and open Round 1 through the ready-gate — ``Join``, ``DeclareRole``,
-``Ready``, ``OpenRound`` — freezing N at the ready set (service ADR-0001).
+form the roster and open Round 1 through the ready-gate — ``Join``, ``Ready``,
+``OpenRound`` — freezing N at the ready set (service ADR-0001).
+
+The stakeholder Role is **no longer self-declared in the lobby**: it is a property
+of the user account, chosen at registration and carried on the JWT
+``stakeholder_role`` claim, so ``Join`` already carries it (the room reads it off the
+verified handshake). One fewer lobby step.
 """
 
 from dataclasses import dataclass, field, replace
 
 # The small stakeholder-Role catalog the service owns (radar branches; the grouping
-# for intra-Role Consensus). Distinct from the JWT auth ``role`` and not carried in
-# the token — a Participant self-declares one of these at join.
-ROLE_CATALOG = ("istituzionale", "economico", "tecnico", "sociale", "ambientale")
+# for intra-Role Consensus). Distinct from the JWT auth ``role``. Mirrors the
+# monolith's ``StakeholderRole`` Literal and public.users' CHECK; a Participant
+# brings one of these from their account (set at registration), not declared here.
+ROLE_CATALOG = ("tecnico", "istituzionale", "economico")
 
 
 @dataclass(frozen=True)
@@ -43,11 +49,10 @@ class ProcessState:
 
 @dataclass(frozen=True)
 class Join:
-    user_id: str
+    """A user joins a Bene's process, bringing the stakeholder ``role`` their account
+    carries (from registration, via the JWT claim) — set immediately, no separate
+    declaration step."""
 
-
-@dataclass(frozen=True)
-class DeclareRole:
     user_id: str
     role: str
 
@@ -111,17 +116,14 @@ def _find(state: ProcessState, user_id: str) -> Participant | None:
 def apply(state: ProcessState, event) -> tuple[ProcessState, list]:
     """Reduce one lobby event into the next state and its emitted side-effects."""
     if isinstance(event, Join):
-        if _find(state, event.user_id) is not None:
-            return state, []
-        joined = state.participants + (Participant(user_id=event.user_id),)
-        return replace(state, participants=joined), []
-
-    if isinstance(event, DeclareRole):
         if event.role not in ROLE_CATALOG:
             raise ValueError(f"unknown stakeholder Role: {event.role!r}")
-        return _update_participant(
-            state, event.user_id, lambda p: replace(p, role=event.role)
-        ), []
+        if _find(state, event.user_id) is not None:
+            return state, []
+        joined = state.participants + (
+            Participant(user_id=event.user_id, role=event.role),
+        )
+        return replace(state, participants=joined), []
 
     if isinstance(event, Ready):
         return _update_participant(
@@ -132,8 +134,11 @@ def apply(state: ProcessState, event) -> tuple[ProcessState, list]:
         if state.phase == "consensus":
             raise ValueError("consensus reached — the process is terminal")
         roster = tuple(p.user_id for p in state.participants if p.ready)
-        if not roster:
-            raise ValueError("cannot open a Round with nobody ready")
+        # A consensus process is inherently multi-party: a Round needs at least two
+        # ready Participants. One person cannot start a Round alone (there is nothing
+        # to reach consensus *about*), so the ready-gate refuses N<2.
+        if len(roster) < 2:
+            raise ValueError("a Round needs at least two ready participants")
         opened = replace(
             state,
             round_number=state.round_number + 1,
@@ -168,8 +173,8 @@ def apply(state: ProcessState, event) -> tuple[ProcessState, list]:
             # Everyone voted the SAME Vocazione → overall Consensus = 100% (zero
             # entropy, ADR-0002). This is the terminal state (phase 4): the process
             # stops here, no further Round opens, and a single ConsensusReached
-            # carries the winner + how many Rounds it took. (n=1 is trivially
-            # unanimous — one Participant settles it.)
+            # carries the winner + how many Rounds it took. (N is always ≥2 — the
+            # ready-gate refuses a one-person Round — so unanimity is never trivial.)
             settled = replace(state, participants=unready, votes=voted, phase="consensus")
             return settled, [
                 ConsensusReached(

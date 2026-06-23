@@ -5,13 +5,16 @@ public ``apply(state, event)`` reducer and assert the next state and emitted
 side-effects. Covers the self-forming roster, the service-owned Role catalog, the
 live ready count, and the ready-gate that opens Round 1 freezing N at the ready
 set (PRD module 2; service ADR-0001; task 03).
+
+The stakeholder Role is no longer self-declared in the lobby: it rides ``Join``
+(the user's account Role, from the JWT claim). ``j(user)`` is a tiny helper that
+joins with a default Role where the specific value is irrelevant to the test.
 """
 
 import pytest
 
 from src.engine.round_engine import (
     Join,
-    DeclareRole,
     Ready,
     OpenRound,
     CastVote,
@@ -26,6 +29,11 @@ from src.engine.round_engine import (
 )
 
 
+def j(user_id, role="tecnico"):
+    """Join carrying the account's stakeholder Role (defaulted where irrelevant)."""
+    return Join(user_id, role)
+
+
 def _drive(state, events):
     """Fold a sequence of events through the reducer, collecting all effects."""
     effects = []
@@ -38,13 +46,14 @@ def _drive(state, events):
 # --- Inner unit cycles -------------------------------------------------------
 
 
-def test_join_adds_a_participant():
+def test_join_adds_a_participant_with_its_account_role():
     """The roster is self-forming: opening the widget on a Bene (Join) creates a
-    participant with no Role yet, no effect, and the lobby phase is unchanged."""
-    state, effects = apply(initial_state("bene-1"), Join("u1"))
+    participant whose stakeholder Role is the one its account carries (from the JWT
+    claim), not ready yet, no effect, and the lobby phase is unchanged."""
+    state, effects = apply(initial_state("bene-1"), Join("u1", "tecnico"))
 
     assert [p.user_id for p in state.participants] == ["u1"]
-    assert state.participants[0].role is None
+    assert state.participants[0].role == "tecnico"
     assert state.participants[0].ready is False
     assert state.phase == "lobby"
     assert effects == []
@@ -53,30 +62,22 @@ def test_join_adds_a_participant():
 def test_join_is_idempotent():
     """Re-opening the widget (a second Join for the same user) does not duplicate
     the participant — the roster tracks user×Bene, not connections."""
-    state, _ = apply(initial_state("bene-1"), Join("u1"))
-    state, effects = apply(state, Join("u1"))
+    state, _ = apply(initial_state("bene-1"), j("u1"))
+    state, effects = apply(state, j("u1"))
 
     assert [p.user_id for p in state.participants] == ["u1"]
     assert effects == []
 
 
-def test_declare_role_sets_the_stakeholder_role():
-    """A joined Participant self-declares a stakeholder Role from the catalog; it is
-    stored on their roster entry (distinct from the JWT auth role), no effect."""
-    state, _ = apply(initial_state("bene-1"), Join("u1"))
-    state, effects = apply(state, DeclareRole("u1", "tecnico"))
-
-    assert state.participants[0].role == "tecnico"
-    assert effects == []
-
-
-def test_declare_role_outside_catalog_is_rejected():
-    """A Role not in the service-owned catalog is refused (ValueError); the bad
-    value never reaches a radar branch."""
-    state, _ = apply(initial_state("bene-1"), Join("u1"))
+def test_join_role_outside_catalog_is_rejected():
+    """A Role not in the service-owned catalog (or missing, e.g. a legacy token with
+    no claim) is refused (ValueError) at join; the bad value never reaches a roster
+    entry or a radar branch."""
+    with pytest.raises(ValueError):
+        apply(initial_state("bene-1"), Join("u1", "banana"))
 
     with pytest.raises(ValueError):
-        apply(state, DeclareRole("u1", "banana"))
+        apply(initial_state("bene-1"), Join("u1", None))
 
 
 def test_ready_marks_participant_and_updates_live_count():
@@ -84,7 +85,7 @@ def test_ready_marks_participant_and_updates_live_count():
     lobby shows ('quanti pronti'), so clients can render it as it changes."""
     state, _ = _drive(
         initial_state("bene-1"),
-        [Join("u1"), Join("u2"), Ready("u1")],
+        [j("u1"), j("u2"), Ready("u1")],
     )
 
     assert ready_count(state) == 1
@@ -99,7 +100,7 @@ def test_open_round_freezes_roster_at_the_ready_set():
     carries the Bene and N. A present-but-not-ready Participant is excluded from N."""
     state, _ = _drive(
         initial_state("bene-1"),
-        [Join("u1"), Ready("u1"), Join("u2"), Ready("u2"), Join("u3")],
+        [j("u1"), Ready("u1"), j("u2"), Ready("u2"), j("u3")],
     )
 
     state, effects = apply(state, OpenRound())
@@ -111,13 +112,17 @@ def test_open_round_freezes_roster_at_the_ready_set():
     assert effects == [RoundOpened(poi_id="bene-1", round_number=1, n=2)]
 
 
-def test_open_round_needs_at_least_one_ready():
-    """The ready-gate cannot open a Round with nobody ready — N=0 has no meaningful
-    'N/N voted' close, so OpenRound is refused."""
-    state, _ = apply(initial_state("bene-1"), Join("u1"))
-
+def test_open_round_needs_at_least_two_ready():
+    """A consensus process is multi-party: the ready-gate refuses a Round with fewer
+    than two ready Participants — neither nobody ready, nor a single person who
+    readied alone (you cannot start a Round by yourself)."""
+    state, _ = apply(initial_state("bene-1"), j("u1"))
     with pytest.raises(ValueError):
-        apply(state, OpenRound())
+        apply(state, OpenRound())  # nobody ready
+
+    state, _ = apply(state, Ready("u1"))
+    with pytest.raises(ValueError):
+        apply(state, OpenRound())  # exactly one ready is still refused
 
 
 def test_latecomer_after_open_is_queued_not_in_denominator():
@@ -126,14 +131,14 @@ def test_latecomer_after_open_is_queued_not_in_denominator():
     'N/N hanno votato' stays well-defined."""
     state, _ = _drive(
         initial_state("bene-1"),
-        [Join("u1"), Ready("u1"), OpenRound()],
+        [j("u1"), Ready("u1"), j("u2"), Ready("u2"), OpenRound()],
     )
 
-    state, effects = apply(state, Join("u2"))
+    state, effects = apply(state, j("u3"))
 
-    assert "u2" in [p.user_id for p in state.participants]
-    assert "u2" not in state.roster
-    assert state.roster == ("u1",)
+    assert "u3" in [p.user_id for p in state.participants]
+    assert "u3" not in state.roster
+    assert set(state.roster) == {"u1", "u2"}
     assert state.round_number == 1
     assert effects == []
 
@@ -145,7 +150,7 @@ def _opened(*ready_users):
     """A Bene with the given users joined, ready and Round 1 open (roster = N)."""
     events = []
     for u in ready_users:
-        events += [Join(u), Ready(u)]
+        events += [j(u), Ready(u)]
     events.append(OpenRound())
     state, _ = _drive(initial_state("bene-1"), events)
     return state
@@ -180,7 +185,7 @@ def test_a_non_roster_participant_cannot_vote_in_this_round():
     never readied) is not in N, so their CastVote is refused (ValueError) and the
     'N/N hanno votato' close stays well-defined."""
     state = _opened("u1", "u2")
-    state, _ = apply(state, Join("u3"))  # latecomer, queued for the next Round
+    state, _ = apply(state, j("u3"))  # latecomer, queued for the next Round
 
     with pytest.raises(ValueError):
         apply(state, CastVote("u3", "casa-popolare"))
@@ -226,15 +231,16 @@ def test_new_round_reopens_via_the_same_ready_gate():
     state, _ = apply(state, CastVote("u1", "casa-popolare"))
     state, _ = apply(state, CastVote("u2", "spazio-culturale"))  # Round 1 closes
 
-    # Only u1 signals ready for the next Round → the roster re-freezes at the new set.
+    # Both signal ready for the next Round → the roster re-freezes at the new set.
     state, _ = apply(state, Ready("u1"))
+    state, _ = apply(state, Ready("u2"))
     state, effects = apply(state, OpenRound())
 
     assert state.round_number == 2
     assert state.phase == "voting"
-    assert state.roster == ("u1",)
+    assert set(state.roster) == {"u1", "u2"}
     assert state.votes == {}
-    assert effects == [RoundOpened(poi_id="bene-1", round_number=2, n=1)]
+    assert effects == [RoundOpened(poi_id="bene-1", round_number=2, n=2)]
 
 
 def test_latecomer_joins_the_next_round():
@@ -242,7 +248,7 @@ def test_latecomer_joins_the_next_round():
     between Rounds and is counted in the next Round's denominator — the roster can
     change only between Rounds."""
     state = _opened("u1", "u2")
-    state, _ = apply(state, Join("u3"))  # latecomer, not in Round 1's N
+    state, _ = apply(state, j("u3"))  # latecomer, not in Round 1's N
     state, _ = apply(state, CastVote("u1", "casa-popolare"))
     state, _ = apply(state, CastVote("u2", "spazio-culturale"))  # split close → recap
 
@@ -259,17 +265,18 @@ def test_latecomer_joins_the_next_round():
 
 
 def test_lobby_opens_round_one_freezing_ready_roster():
-    """Three users join and declare Roles; two ready up and start Round 1. The
-    roster freezes at the ready set (N=2), a RoundOpened side-effect fires, and a
-    fourth latecomer who joins after the open is NOT in the current denominator."""
+    """Three users join (each bringing its account Role); two ready up and start
+    Round 1. The roster freezes at the ready set (N=2), a RoundOpened side-effect
+    fires, and a fourth latecomer who joins after the open is NOT in the current
+    denominator."""
     state = initial_state("bene-1")
 
     state, effects = _drive(
         state,
         [
-            Join("u1"), DeclareRole("u1", "istituzionale"), Ready("u1"),
-            Join("u2"), DeclareRole("u2", "economico"), Ready("u2"),
-            Join("u3"), DeclareRole("u3", "tecnico"),  # present, never readies
+            Join("u1", "istituzionale"), Ready("u1"),
+            Join("u2", "economico"), Ready("u2"),
+            Join("u3", "tecnico"),  # present, never readies
             OpenRound(),
         ],
     )
@@ -280,7 +287,7 @@ def test_lobby_opens_round_one_freezing_ready_roster():
     assert effects == [RoundOpened(poi_id="bene-1", round_number=1, n=2)]
 
     # Latecomer joins after the Round opened → queued for the next Round.
-    state, effects = apply(state, Join("u4"))
+    state, effects = apply(state, Join("u4", "tecnico"))
     assert "u4" not in state.roster
     assert state.round_number == 1
     assert effects == []
@@ -297,9 +304,9 @@ def test_round_closes_for_everyone_the_instant_the_last_vote_lands():
     state, _ = _drive(
         initial_state("bene-1"),
         [
-            Join("u1"), Ready("u1"),
-            Join("u2"), Ready("u2"),
-            Join("u3"), Ready("u3"),
+            j("u1"), Ready("u1"),
+            j("u2"), Ready("u2"),
+            j("u3"), Ready("u3"),
             OpenRound(),
         ],
     )
@@ -307,7 +314,7 @@ def test_round_closes_for_everyone_the_instant_the_last_vote_lands():
     assert (voted_count(state), remaining_count(state)) == (0, 3)
 
     # A latecomer joins mid-Round → in the next Round, not this denominator.
-    state, _ = apply(state, Join("u4"))
+    state, _ = apply(state, j("u4"))
 
     # Votes land one by one; the tally updates live and the Round stays open.
     state, effects = apply(state, CastVote("u1", "casa-popolare"))

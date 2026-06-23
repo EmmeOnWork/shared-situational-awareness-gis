@@ -73,10 +73,10 @@ def test_event_broadcasts_updated_view_to_all_connections():
     _run(rm.connect("bene-1", a))
     _run(rm.connect("bene-1", b))
 
-    _run(rm.handle("bene-1", a, "u1", {"type": "join"}))
+    _run(rm.handle("bene-1", a, "u1", {"type": "join"}, role="tecnico"))
 
-    assert a.sent[-1]["participants"] == [{"user_id": "u1", "role": None, "ready": False}]
-    assert b.sent[-1]["participants"] == [{"user_id": "u1", "role": None, "ready": False}]
+    assert a.sent[-1]["participants"] == [{"user_id": "u1", "role": "tecnico", "ready": False}]
+    assert b.sent[-1]["participants"] == [{"user_id": "u1", "role": "tecnico", "ready": False}]
 
 
 def test_full_round_persists_outcome_with_duration_and_enters_recap():
@@ -90,8 +90,7 @@ def test_full_round_persists_outcome_with_duration_and_enters_recap():
     _run(rm.connect("bene-1", conn))
 
     for u, role in [("u1", "istituzionale"), ("u2", "economico")]:
-        _run(rm.handle("bene-1", conn, u, {"type": "join"}))
-        _run(rm.handle("bene-1", conn, u, {"type": "declare_role", "role": role}))
+        _run(rm.handle("bene-1", conn, u, {"type": "join"}, role=role))
         _run(rm.handle("bene-1", conn, u, {"type": "ready"}))
     clock.t = 100.0
     _run(rm.handle("bene-1", conn, "u1", {"type": "start"}))  # opens the Round at t=100
@@ -119,8 +118,7 @@ def test_unanimous_close_persists_final_outcome_and_broadcasts_phase4():
     _run(rm.connect("bene-1", conn))
 
     for u, role in [("u1", "istituzionale"), ("u2", "economico")]:
-        _run(rm.handle("bene-1", conn, u, {"type": "join"}))
-        _run(rm.handle("bene-1", conn, u, {"type": "declare_role", "role": role}))
+        _run(rm.handle("bene-1", conn, u, {"type": "join"}, role=role))
         _run(rm.handle("bene-1", conn, u, {"type": "ready"}))
     clock.t = 10.0
     _run(rm.handle("bene-1", conn, "u1", {"type": "start"}))  # opens at t=10
@@ -165,7 +163,7 @@ def test_rooms_are_isolated_per_bene():
     _run(rm.connect("bene-2", b))
     before_b = len(b.sent)
 
-    _run(rm.handle("bene-1", a, "u1", {"type": "join"}))
+    _run(rm.handle("bene-1", a, "u1", {"type": "join"}, role="tecnico"))
 
     assert a.sent[-1]["participants"]  # bene-1 updated
     assert len(b.sent) == before_b  # bene-2 untouched

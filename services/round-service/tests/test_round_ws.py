@@ -39,11 +39,12 @@ def test_verified_client_receives_the_current_view_on_connect(client):
 def test_authenticated_message_is_applied_and_broadcast(client):
     """A `join` message from a verified client is applied with the handshake identity
     (JWT sub) and the updated view is broadcast back over the same connection."""
-    token = make_token(sub="7")
+    token = make_token(sub="7", stakeholder_role="economico")
     with client.websocket_connect(f"/rounds/ws/203?access_token={token}") as ws:
         ws.receive_json()  # the initial snapshot
         ws.send_json({"type": "join"})
         view = ws.receive_json()
 
-    assert view["participants"] == [{"user_id": "7", "role": None, "ready": False}]
+    # The stakeholder Role is taken from the handshake token, not the message body.
+    assert view["participants"] == [{"user_id": "7", "role": "economico", "ready": False}]
     assert view["ready_count"] == 0

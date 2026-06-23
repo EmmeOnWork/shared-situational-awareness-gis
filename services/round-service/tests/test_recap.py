@@ -13,7 +13,6 @@ import pytest
 
 from src.engine.round_engine import (
     Join,
-    DeclareRole,
     Ready,
     OpenRound,
     CastVote,
@@ -27,12 +26,11 @@ from src.engine.recap import build_outcome
 
 def _closed(*voters):
     """Drive a Bene to a closed Round 1. ``voters`` are (user_id, role, vocazione)
-    triples: each joins, declares its Role, readies, then casts its Vote — the last
-    Vote (N/N) closes the Round into the recap phase."""
+    triples: each joins with its account Role, readies, then casts its Vote — the
+    last Vote (N/N) closes the Round into the recap phase."""
     state = initial_state("bene-1")
     for user_id, role, _ in voters:
-        state, _ = apply(state, Join(user_id))
-        state, _ = apply(state, DeclareRole(user_id, role))
+        state, _ = apply(state, Join(user_id, role))
         state, _ = apply(state, Ready(user_id))
     state, _ = apply(state, OpenRound())
     for user_id, _, vocazione in voters:
@@ -63,8 +61,8 @@ def test_outcome_tallies_votes_by_role():
 
 def test_radar_branches_are_roles_present_in_the_round():
     """The radar's branches are exactly the stakeholder Roles held by voters in this
-    Round — a catalog Role nobody declared gets no branch (no phantom 0-intensity
-    spoke). 'tecnico', 'sociale', 'ambientale' are in the catalog but absent here."""
+    Round — a catalog Role nobody brought gets no branch (no phantom 0-intensity
+    spoke). 'tecnico' is in the catalog but absent here."""
     state = _closed(
         ("u1", "istituzionale", "residenziale"),
         ("u2", "economico", "commerciale"),

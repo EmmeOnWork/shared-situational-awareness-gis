@@ -8,10 +8,10 @@
  *
  * SENSITIVE (ADR-0003): it CONSUMES the Active Workshop (never publishes it). With
  * a Bene selected and a host JWT present it opens that Bene's realtime room and
- * renders whichever phase the room is in — lobby (join, declare stakeholder Role,
- * ready, open Round 1), voting (the 16-Vocazione ballot with a confirm modal and
- * the live X/N tally), or the recap (the consensus radar, "consenso totale", and
- * "inizia un nuovo round"). No Active Workshop ⇒ empty state.
+ * renders whichever phase the room is in — lobby (join with the account's
+ * stakeholder Role, ready, open Round 1), voting (the 16-Vocazione ballot with a
+ * confirm modal and the live X/N tally), or the recap (the consensus radar,
+ * "consenso totale", and "inizia un nuovo round"). No Active Workshop ⇒ empty state.
  *
  * Contract with the host (mirrors the sibling widgets):
  *   attribute `token` — the monolith-issued JWT; the host sets and refreshes it.
@@ -22,11 +22,6 @@ import { readActiveWorkshop, subscribeActiveWorkshop, type ActiveWorkshop } from
 import { connectRoom, RoundClient, type RoundView } from "./round-client";
 import { radarVertices, spokeEnds, consensoTotalePct, type Point } from "./radar";
 import { VOCAZIONI } from "./vocazioni";
-
-// The small stakeholder-Role catalog the service owns (the radar's branches; the
-// grouping for intra-Role Consensus). Mirrors the backend ROLE_CATALOG — copied,
-// not imported (each Widget ships self-contained, service ADR-0001).
-const STAKEHOLDER_ROLES = ["istituzionale", "economico", "tecnico", "sociale", "ambientale"] as const;
 
 const STYLES = `
     :host { display: block; height: 100%; font-family: system-ui, sans-serif; color: #f9fafb; }
@@ -44,6 +39,7 @@ const STYLES = `
     button:disabled { opacity: 0.5; cursor: default; }
     select { font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 8px; background: #0f172a; color: #f1f5f9; border: 1px solid #334155; max-width: 240px; }
     .roster { font-size: 12px; color: #94a3b8; }
+    .hint { font-size: 11px; color: #fbbf24; margin-top: 6px; }
     svg { display: block; }
     .total { font-size: 15px; font-weight: 700; color: #93c5fd; }
     .modal { position: absolute; inset: 0; background: rgba(2,6,23,0.78); display: flex; align-items: center; justify-content: center; }
@@ -68,7 +64,10 @@ class RoundWidget extends HTMLElement {
 
     // UI-local (not server) state.
     private userId?: string;
-    private selectedRole: string = STAKEHOLDER_ROLES[0];
+    // The account's stakeholder Role, decoded from the host JWT. Absent ⇒ a stale
+    // token minted before the claim existed — the server would reject `join`, so the
+    // lobby tells the user to re-login instead of offering a doomed Join button.
+    private stakeholderRole?: string;
     private selectedVocazione: string = VOCAZIONI[0].id;
     private confirming = false;
     private error = "";
@@ -79,7 +78,7 @@ class RoundWidget extends HTMLElement {
     }
 
     connectedCallback() {
-        this.userId = jwtSub(this.getAttribute("token"));
+        this.readToken();
         this.active = readActiveWorkshop();
         this.unsubscribe = subscribeActiveWorkshop((workshop) => {
             this.active = workshop;
@@ -98,12 +97,20 @@ class RoundWidget extends HTMLElement {
 
     attributeChangedCallback(name: string) {
         if (name === "token") {
-            this.userId = jwtSub(this.getAttribute("token"));
+            this.readToken();
             // Re-open the room with the refreshed token.
             this.teardownRoom();
             this.syncRoom();
         }
         this.render();
+    }
+
+    /** Decode `sub` + `stakeholder_role` from the current host token. */
+    private readToken() {
+        const claims = jwtClaims(this.getAttribute("token"));
+        this.userId = claims?.sub != null ? String(claims.sub) : undefined;
+        this.stakeholderRole =
+            typeof claims?.stakeholder_role === "string" ? claims.stakeholder_role : undefined;
     }
 
     /** Open/close the Bene's room so the live connection always matches the
@@ -176,23 +183,32 @@ class RoundWidget extends HTMLElement {
     private renderLobby(view: RoundView): string {
         const me = this.me();
         const roster = `<div class="roster">${view.participants.length} in lobby · ${view.ready_count} pronti</div>`;
+        if (!this.stakeholderRole) {
+            // Stale token (no role claim): the server would reject `join`, so guide the
+            // user to refresh it rather than offer a Join that silently fails.
+            return `${roster}<div class="state">Ruolo non disponibile sul tuo account.<br/>Esci e rientra per aggiornarlo.</div>`;
+        }
         if (!me) {
+            // The stakeholder Role comes from the account (JWT claim), so joining is a
+            // single action — no in-widget Role declaration.
             return `${roster}<button data-act="join">Entra nel round</button>`;
         }
-        if (!me.role) {
-            const opts = STAKEHOLDER_ROLES.map(
-                (r) => `<option value="${r}" ${r === this.selectedRole ? "selected" : ""}>${r}</option>`,
-            ).join("");
-            return `${roster}<div class="state">Dichiara il tuo ruolo</div>
-                <select data-role>${opts}</select>
-                <button data-act="declare">Conferma ruolo</button>`;
-        }
         if (!me.ready) {
-            return `${roster}<div class="state">Ruolo: <b>${escapeHtml(me.role)}</b></div>
-                <button data-act="ready">Sono pronto</button>`;
+            const role = me.role ? `<div class="state">Ruolo: <b>${escapeHtml(me.role)}</b></div>` : "";
+            return `${roster}${role}<button data-act="ready">Sono pronto</button>`;
         }
         return `${roster}<div class="state">In attesa degli altri…</div>
-            <button data-act="start">Avvia il round · ${view.ready_count} pronti</button>`;
+            ${this.startButton(view, "Avvia il round")}`;
+    }
+
+    /** The "open a Round" button, shared by the lobby and the recap. A Round needs
+     *  at least two ready Participants (the engine enforces it too), so below that it
+     *  is disabled with a hint rather than firing an action the server would reject. */
+    private startButton(view: RoundView, label: string): string {
+        const enough = view.ready_count >= 2;
+        const disabled = enough ? "" : "disabled";
+        const hint = enough ? "" : `<div class="hint">Servono almeno 2 partecipanti pronti</div>`;
+        return `<button data-act="start" ${disabled}>${label} · ${view.ready_count} pronti</button>${hint}`;
     }
 
     private renderVoting(view: RoundView): string {
@@ -227,9 +243,12 @@ class RoundWidget extends HTMLElement {
         const radar = recap ? this.renderRadar(recap.radar) : "";
         const total = recap ? `<div class="total">consenso totale ${consensoTotalePct(recap.overall)}</div>` : "";
         const me = this.me();
-        const readyBtn = me?.ready ? "" : `<button class="secondary" data-act="ready">Sono pronto a ricominciare</button>`;
-        return `${radar}${total}${readyBtn}
-            <button data-act="start">Inizia un nuovo round · ${view.ready_count} pronti</button>`;
+        // One button at a time, like the lobby: first ready up, then (once ready) open
+        // the next Round. Avoids the earlier two-buttons-that-look-the-same confusion.
+        const action = me?.ready
+            ? this.startButton(view, "Inizia un nuovo round")
+            : `<button data-act="ready">Sono pronto a ricominciare</button>`;
+        return `${radar}${total}${action}`;
     }
 
     /** Build the recap radar SVG: a spoke per Role present, the polygon through the
@@ -266,8 +285,6 @@ class RoundWidget extends HTMLElement {
     /** Attach listeners after each paint (the markup is re-rendered each view). */
     private wire() {
         const root = this.root;
-        const roleSel = root.querySelector<HTMLSelectElement>("select[data-role]");
-        roleSel?.addEventListener("change", () => (this.selectedRole = roleSel.value));
         const vocSel = root.querySelector<HTMLSelectElement>("select[data-vocazione]");
         vocSel?.addEventListener("change", () => (this.selectedVocazione = vocSel.value));
 
@@ -281,7 +298,6 @@ class RoundWidget extends HTMLElement {
         if (!client) return;
         switch (action) {
             case "join": client.join(); break;
-            case "declare": client.declareRole(this.selectedRole); break;
             case "ready": client.ready(); break;
             case "start": client.start(); break;
             case "vote-open": this.confirming = true; this.render(); break;
@@ -294,15 +310,15 @@ class RoundWidget extends HTMLElement {
     }
 }
 
-/** Decode the `sub` (user_id) from a JWT without verifying it — the element only
- *  needs to know which roster row is "me"; the server enforces identity. */
-function jwtSub(token: string | null): string | undefined {
+/** Decode a JWT's payload without verifying it — the element only needs to read
+ *  `sub` (which roster row is "me") and `stakeholder_role` (the account Role the
+ *  server seeds on join); the server enforces identity and the role for real. */
+function jwtClaims(token: string | null): Record<string, unknown> | undefined {
     if (!token) return undefined;
     try {
         const part = token.split(".")[1];
         const json = atob(part.replace(/-/g, "+").replace(/_/g, "/"));
-        const payload = JSON.parse(json);
-        return payload.sub != null ? String(payload.sub) : undefined;
+        return JSON.parse(json) as Record<string, unknown>;
     } catch {
         return undefined;
     }

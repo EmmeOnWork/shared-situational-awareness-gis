@@ -24,8 +24,9 @@ a ricominciare" ready-signal); a user who joins mid-Round enters the *next* Roun
 never the current one — so "N/N hanno votato" is a deterministic close and each
 Round's N and timings are stable for analysis. **Every Round opens through the same
 ready-gate** — between Rounds it is the phase-3 "inizia nuovo round" readiness;
-**Round 1 opens through a phase-0 lobby** (participants join, self-declare their
-Role, and the ready ones start it), so there is no special case for the first Round.
+**Round 1 opens through a phase-0 lobby** (participants join — bringing the Role
+their account carries — and the ready ones start it), so there is no special case
+for the first Round.
 Rounds **repeat without an upper bound** until Consensus = 100%.
 _Avoid_: vote (a Round contains many), session, poll.
 
@@ -75,14 +76,17 @@ _Avoid_: member (no membership list exists), user (reserve for the monolith's
 account), voter (a Participant who hasn't voted yet is still a Participant).
 
 **Role** (stakeholder taxonomy):
-The participatory-workshop stakeholder category a Participant **self-declares** on
-joining — istituzionale, economico, tecnico, … — drawn from a small catalog the
-Round Manager owns. It is the **radar's branches** and the grouping for *intra-role*
-Consensus. It is **not** the monolith's JWT `role` (an auth role) and is **not**
-carried in the token; the service stores it at join time ("mappato in fase di
-autenticazione").
-_Avoid_: role unqualified (collides with the JWT auth `role` — always say
-*stakeholder role* when ambiguous), category (that is the Vocazione/winner).
+The participatory-workshop stakeholder category a Participant holds — **tecnico,
+istituzionale, economico** (a closed catalog of three the Round Manager mirrors). It
+is the **radar's branches** and the grouping for *intra-role* Consensus. It is **not**
+the monolith's JWT `role` (an auth role), but it **is** a property of the user account:
+**chosen once at registration** in the monolith, persisted on `public.users`, and
+carried on the JWT as the **`stakeholder_role` claim**. The Round Manager reads it off
+the **verified handshake** and seeds it on `join` — there is **no in-lobby Role
+declaration** (a legacy token minted before the claim existed is rejected at join, so
+the user re-logs in to refresh it). _Avoid_: role unqualified (collides with the JWT
+auth `role` — always say *stakeholder role* when ambiguous), category (that is the
+Vocazione/winner).
 
 **Chat**:
 A **per-Bene, continuous** anonymous message stream that spans *all* the Bene's

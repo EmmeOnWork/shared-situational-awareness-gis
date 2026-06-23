@@ -35,11 +35,13 @@ test("a unanimous branch reaches the rim; a dispersed branch sits at the centre"
 
 test("there is exactly one vertex per Role present, evenly spaced", () => {
     const verts = radarVertices(
+        // Pure geometry: labels are arbitrary (the function spaces N branches
+        // evenly regardless of the catalog), so four here exercise the cardinal case.
         [
-            { role: "istituzionale", consensus: 1 },
-            { role: "economico", consensus: 1 },
-            { role: "tecnico", consensus: 1 },
-            { role: "sociale", consensus: 1 },
+            { role: "r1", consensus: 1 },
+            { role: "r2", consensus: 1 },
+            { role: "r3", consensus: 1 },
+            { role: "r4", consensus: 1 },
         ],
         CX,
         CY,

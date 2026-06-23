@@ -10,7 +10,6 @@ the recap carries only the anonymized aggregate.
 
 from src.engine.round_engine import (
     Join,
-    DeclareRole,
     Ready,
     OpenRound,
     CastVote,
@@ -28,11 +27,11 @@ def _drive(state, events):
 
 
 def test_lobby_view_shows_roster_and_live_ready_count():
-    """In the lobby the view carries each Participant (user, declared Role, ready)
+    """In the lobby the view carries each Participant (user, account Role, ready)
     and the live ready count the 'quanti pronti' / start button reads."""
     state = _drive(
         initial_state("bene-1"),
-        [Join("u1"), DeclareRole("u1", "tecnico"), Ready("u1"), Join("u2")],
+        [Join("u1", "tecnico"), Ready("u1"), Join("u2", "economico")],
     )
 
     view = project_view(state)
@@ -41,7 +40,7 @@ def test_lobby_view_shows_roster_and_live_ready_count():
     assert view["round_number"] == 0
     assert view["ready_count"] == 1
     assert {"user_id": "u1", "role": "tecnico", "ready": True} in view["participants"]
-    assert {"user_id": "u2", "role": None, "ready": False} in view["participants"]
+    assert {"user_id": "u2", "role": "economico", "ready": False} in view["participants"]
 
 
 def test_voting_view_shows_live_tally_and_who_has_voted():
@@ -50,7 +49,7 @@ def test_voting_view_shows_live_tally_and_who_has_voted():
     VOTATO') — but never the Vocazioni chosen (vote content stays secret)."""
     state = _drive(
         initial_state("bene-1"),
-        [Join("u1"), Ready("u1"), Join("u2"), Ready("u2"), OpenRound(), CastVote("u1", "residenziale")],
+        [Join("u1", "tecnico"), Ready("u1"), Join("u2", "economico"), Ready("u2"), OpenRound(), CastVote("u1", "residenziale")],
     )
 
     view = project_view(state)
@@ -70,8 +69,8 @@ def test_recap_view_carries_radar_and_consenso_totale():
     state = _drive(
         initial_state("bene-1"),
         [
-            Join("u1"), DeclareRole("u1", "istituzionale"), Ready("u1"),
-            Join("u2"), DeclareRole("u2", "economico"), Ready("u2"),
+            Join("u1", "istituzionale"), Ready("u1"),
+            Join("u2", "economico"), Ready("u2"),
             OpenRound(),
             CastVote("u1", "residenziale"), CastVote("u2", "commerciale"),
         ],
@@ -95,8 +94,8 @@ def test_terminal_view_shows_winner_and_round_count_no_new_round():
     state = _drive(
         initial_state("bene-1"),
         [
-            Join("u1"), DeclareRole("u1", "istituzionale"), Ready("u1"),
-            Join("u2"), DeclareRole("u2", "economico"), Ready("u2"),
+            Join("u1", "istituzionale"), Ready("u1"),
+            Join("u2", "economico"), Ready("u2"),
             OpenRound(),
             CastVote("u1", "residenziale"), CastVote("u2", "residenziale"),
         ],

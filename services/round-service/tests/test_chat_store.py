@@ -39,7 +39,7 @@ def _opened(*ready_users):
     """A Bene with the given users joined, ready, and Round 1 open (roster = N)."""
     events = []
     for u in ready_users:
-        events += [Join(u), Ready(u)]
+        events += [Join(u, "tecnico"), Ready(u)]
     events.append(OpenRound())
     return _drive(initial_state("bene-1"), events)
 

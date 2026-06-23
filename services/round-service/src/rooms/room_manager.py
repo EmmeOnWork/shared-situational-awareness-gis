@@ -21,7 +21,6 @@ from src.engine.recap import RoundOutcome, build_outcome
 from src.engine.round_engine import (
     CastVote,
     ConsensusReached,
-    DeclareRole,
     Join,
     OpenRound,
     ProcessState,
@@ -46,14 +45,14 @@ class Room:
     opened_at: float | None = None
 
 
-def _to_event(user_id: str, message: dict):
-    """Map an authenticated client message to an engine event. ``user_id`` is the
-    verified handshake identity, never trusted from the message body."""
+def _to_event(user_id: str, role: str | None, message: dict):
+    """Map an authenticated client message to an engine event. ``user_id`` and the
+    stakeholder ``role`` are the verified handshake identity (JWT ``sub`` +
+    ``stakeholder_role`` claim), never trusted from the message body — so ``join``
+    carries the account's Role with no separate declaration step."""
     kind = message.get("type")
     if kind == "join":
-        return Join(user_id)
-    if kind == "declare_role":
-        return DeclareRole(user_id, message["role"])
+        return Join(user_id, role)
     if kind == "ready":
         return Ready(user_id)
     if kind == "start":
@@ -100,14 +99,22 @@ class RoomManager:
         if room is not None:
             room.connections.discard(connection)
 
-    async def handle(self, poi_id: str, connection, user_id: str, message: dict) -> None:
+    async def handle(
+        self,
+        poi_id: str,
+        connection,
+        user_id: str,
+        message: dict,
+        role: str | None = None,
+    ) -> None:
         """Apply one authenticated client message, react to its effects and
-        broadcast the new view. An engine-rejected action is reported back to the
-        sending ``connection`` alone and leaves the room (and every other client)
-        unchanged."""
+        broadcast the new view. ``role`` is the sender's stakeholder Role from the
+        verified handshake (used by ``join``). An engine-rejected action is reported
+        back to the sending ``connection`` alone and leaves the room (and every other
+        client) unchanged."""
         room = self._room(poi_id)
         try:
-            event = _to_event(user_id, message)
+            event = _to_event(user_id, role, message)
             state, effects = apply(room.state, event)
         except (ValueError, KeyError, NotImplementedError) as exc:
             await connection.send_json({"type": "error", "detail": str(exc)})

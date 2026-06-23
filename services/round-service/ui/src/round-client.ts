@@ -58,26 +58,31 @@ export function roundSocketUrl(base: string, poiId: number): string {
     return `${wsOrigin}/rounds/ws/${poiId}`;
 }
 
-/** The minimal socket surface RoundClient drives (the real WebSocket satisfies it). */
+/** The WebSocket OPEN readyState (WebSocket.OPEN), named to avoid the magic 1. */
+const WS_OPEN = 1;
+
+/** The minimal socket surface RoundClient drives (the real WebSocket satisfies it).
+ *  `readyState` is optional so tests can pass a bare `{ send }` (treated as ready). */
 interface Sendable {
     send(data: string): void;
+    readyState?: number;
 }
 
 /** Sends the typed action messages; the room applies them under the handshake
  *  identity (the client never sends a user_id — the server owns it). */
 export class RoundClient {
     private readonly socket: Sendable;
+    // Messages enqueued while the socket is still CONNECTING, flushed on `open`.
+    private readonly pending: string[] = [];
 
     constructor(socket: Sendable) {
         this.socket = socket;
     }
 
+    /** Join the Bene's process. The stakeholder Role is not sent — the server reads
+     *  it from the handshake JWT (set at registration), so there is no declare step. */
     join(): void {
         this.send({ type: "join" });
-    }
-
-    declareRole(role: string): void {
-        this.send({ type: "declare_role", role });
     }
 
     ready(): void {
@@ -94,8 +99,22 @@ export class RoundClient {
         this.send({ type: "vote", vocazione });
     }
 
+    /** Send any messages buffered while the socket was connecting. Call on `open`. */
+    flush(): void {
+        if (this.socket.readyState !== undefined && this.socket.readyState !== WS_OPEN) return;
+        for (const data of this.pending.splice(0)) this.socket.send(data);
+    }
+
     private send(message: object): void {
-        this.socket.send(JSON.stringify(message));
+        const data = JSON.stringify(message);
+        // A click can land before the handshake completes; raw `socket.send` then
+        // throws and the action is lost. Buffer until OPEN instead. A test's bare
+        // fake has no `readyState` (undefined) → treated as ready, sent immediately.
+        if (this.socket.readyState === undefined || this.socket.readyState === WS_OPEN) {
+            this.socket.send(data);
+        } else {
+            this.pending.push(data);
+        }
     }
 }
 
@@ -109,6 +128,9 @@ export function connectRoom(
     onError: (detail: string) => void,
 ): { client: RoundClient; close: () => void } {
     const socket = new WebSocket(roundSocketUrl(base, poiId), [TOKEN_SUBPROTOCOL, token]);
+    const client = new RoundClient(socket);
+    // Deliver any action a user clicked before the handshake finished.
+    socket.addEventListener("open", () => client.flush());
     socket.addEventListener("message", (event) => {
         const message = parseServerMessage(String((event as MessageEvent).data));
         if (message.kind === "view") {
@@ -117,5 +139,5 @@ export function connectRoom(
             onError(message.detail);
         }
     });
-    return { client: new RoundClient(socket), close: () => socket.close() };
+    return { client, close: () => socket.close() };
 }

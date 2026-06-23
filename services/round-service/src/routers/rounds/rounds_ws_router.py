@@ -2,8 +2,8 @@
 
 One room per Bene (``/rounds/ws/{poi_id}``): a client subscribes, is sent the
 current view, then drives the process by sending authenticated messages (join,
-declare_role, ready, start, vote) which the RoomManager applies and fans back out
-to every connection in that Bene's room.
+ready, start, vote) which the RoomManager applies and fans back out to every
+connection in that Bene's room.
 
 Mounted **unguarded** by ``app.py`` (unlike the HTTP data routes): a browser cannot
 put a bearer token on a WS handshake, so this route self-guards via ``ws_auth`` —
@@ -49,12 +49,17 @@ async def round_room(websocket: WebSocket, poi_id: int):
         return
 
     user_id = str(payload["sub"])
+    # The user's stakeholder Role rides the token (set at registration); the room
+    # uses it for `join`, so there is no in-widget Role declaration. None for a
+    # legacy token minted before the claim existed — the engine then rejects `join`
+    # with a clear error (the user re-logs in to refresh the claim).
+    role = payload.get("stakeholder_role")
     accepted = TOKEN_SUBPROTOCOL if TOKEN_SUBPROTOCOL in offered else None
     await websocket.accept(subprotocol=accepted)
     await rooms.connect(poi_id, websocket)
     try:
         while True:
             message = await websocket.receive_json()
-            await rooms.handle(poi_id, websocket, user_id, message)
+            await rooms.handle(poi_id, websocket, user_id, message, role=role)
     except WebSocketDisconnect:
         rooms.disconnect(poi_id, websocket)

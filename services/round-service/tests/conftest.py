@@ -38,6 +38,8 @@ def make_token(
     scope="",
     include_scope=True,
     include_role=True,
+    stakeholder_role="tecnico",
+    include_stakeholder_role=True,
     token_type="access",
     algorithm="RS256",
     key=None,
@@ -61,6 +63,10 @@ def make_token(
         payload["role"] = "VIEWER"
     if include_scope:
         payload["scope"] = scope
+    if include_stakeholder_role:
+        # The user's account stakeholder Role the round-service reads off the
+        # handshake to seed `join` (set at registration in the monolith).
+        payload["stakeholder_role"] = stakeholder_role
     payload.update(overrides)
     signing_key = key if key is not None else _PRIVATE_PEM
     return pyjwt.encode(payload, signing_key, algorithm=algorithm)

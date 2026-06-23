@@ -123,8 +123,7 @@ def test_full_round_publishes_scoped_lifecycle_notifications_not_votes():
     _run(rm.connect("42", conn))
 
     for u, role in [("u1", "istituzionale"), ("u2", "economico")]:
-        _run(rm.handle("42", conn, u, {"type": "join"}))
-        _run(rm.handle("42", conn, u, {"type": "declare_role", "role": role}))
+        _run(rm.handle("42", conn, u, {"type": "join"}, role=role))
         _run(rm.handle("42", conn, u, {"type": "ready"}))
     _run(rm.handle("42", conn, "u1", {"type": "start"}))  # → RoundOpened
     after_open = len(client.published)
