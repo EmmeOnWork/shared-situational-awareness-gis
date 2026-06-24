@@ -8,6 +8,9 @@ recap — the live view carries only counts and the set of user_ids who have vot
 anonymized aggregate (the radar + pooled "consenso totale"). No IO.
 """
 
+from collections.abc import Iterable
+
+from src.chat.chat_store import AnonymousMessage
 from src.engine.recap import RoundOutcome
 from src.engine.round_engine import (
     ProcessState,
@@ -18,11 +21,15 @@ from src.engine.round_engine import (
 
 
 def _recap_payload(outcome: RoundOutcome) -> dict:
-    """The recap's anonymized aggregate: one radar branch per Role present (its
-    intra-Role Consensus) and the pooled overall rendered as 'consenso totale'."""
+    """The recap's anonymized aggregate: one radar branch per Role present carrying its
+    intra-Role Consensus AND how many voters that Role had (the 'es. 3 tecnici' the
+    fullscreen radar shows), plus the pooled overall rendered as 'consenso totale'.
+    A count is the sum of the Role's per-Vocazione tally; still anonymous (a headcount,
+    never who)."""
+    counts = {role: sum(tally.values()) for role, tally in outcome.votes_by_role.items()}
     return {
         "radar": [
-            {"role": role, "consensus": consensus}
+            {"role": role, "consensus": consensus, "count": counts.get(role, 0)}
             for role, consensus in outcome.per_role_consensus.items()
         ],
         "overall": outcome.overall_consensus,
@@ -41,11 +48,31 @@ def _consensus_payload(state: ProcessState) -> dict:
     }
 
 
-def project_view(state: ProcessState, outcome: RoundOutcome | None = None) -> dict:
+def _chat_payload(messages: Iterable[AnonymousMessage]) -> list[dict]:
+    """The Chat's anonymised stream as JSON-safe dicts (timestamp → ISO 8601). Never
+    carries an author — the messages are already the anonymised read shape; the room
+    decides *whether* this recipient gets the stream (post-vote / recap) at all."""
+    return [
+        {
+            "round_number": m.round_number,
+            "body": m.body,
+            "timestamp": m.timestamp.isoformat(),
+        }
+        for m in messages
+    ]
+
+
+def project_view(
+    state: ProcessState,
+    outcome: RoundOutcome | None = None,
+    chat: Iterable[AnonymousMessage] = (),
+) -> dict:
     """Project the room's state into the client-facing view dict.
 
     ``outcome`` is supplied only in the recap phase (the room builds it off the
     ``RoundClosed`` effect); the live lobby/voting views never carry vote content.
+    ``chat`` is the anonymised stream the room already gated for this recipient
+    (empty when they may not yet read it — before they have voted).
     """
     view = {
         "poi_id": state.poi_id,
@@ -64,5 +91,6 @@ def project_view(state: ProcessState, outcome: RoundOutcome | None = None) -> di
         "consensus": (
             _consensus_payload(state) if state.phase == "consensus" else None
         ),
+        "chat": _chat_payload(chat),
     }
     return view

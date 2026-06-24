@@ -24,6 +24,20 @@ class FakeConn:
         self.sent.append(payload)
 
 
+class FlakyConn(FakeConn):
+    """A connection that can be 'killed' so later sends raise like a gone WebSocket
+    (Starlette's "Cannot call send once a close message has been sent.")."""
+
+    def __init__(self):
+        super().__init__()
+        self.alive = True
+
+    async def send_json(self, payload):
+        if not self.alive:
+            raise RuntimeError('Cannot call "send" once a close message has been sent.')
+        self.sent.append(payload)
+
+
 class FakeRepo:
     """Captures persisted outcomes instead of writing the shared DB."""
 
@@ -135,7 +149,10 @@ def test_unanimous_close_persists_final_outcome_and_broadcasts_phase4():
     # The broadcast is the phase-4 consensus-reached screen.
     assert conn.sent[-1]["phase"] == "consensus"
     assert conn.sent[-1]["consensus"] == {"winner": "residenziale", "rounds": 1}
-    assert conn.sent[-1]["recap"] is None
+    # The terminal phase ALSO carries the recap radar now (same visual as the recap,
+    # but the widget offers no "continue") — unanimous ⇒ every Role at full consensus.
+    assert conn.sent[-1]["recap"] is not None
+    assert conn.sent[-1]["recap"]["overall"] == 1.0
 
 
 def test_invalid_action_errors_only_the_offending_connection():
@@ -167,3 +184,96 @@ def test_rooms_are_isolated_per_bene():
 
     assert a.sent[-1]["participants"]  # bene-1 updated
     assert len(b.sent) == before_b  # bene-2 untouched
+
+
+def test_broadcast_survives_a_dead_connection_and_prunes_it():
+    """A send to a connection that has gone away (a reconnect / refresh race) must not
+    break the fan-out to the healthy connections nor crash the caller — otherwise the
+    exception propagates out of ``handle`` and tears down the triggering client's
+    socket, silently stopping its live updates. The dead connection is dropped."""
+    rm = _manager()
+    alive, flaky = FakeConn(), FlakyConn()
+    _run(rm.connect("bene-1", alive, "u1"))
+    _run(rm.connect("bene-1", flaky, "u2"))  # healthy at connect time
+    flaky.alive = False  # its tab went away before the next broadcast
+
+    # An action from the alive client broadcasts to both; the dead send must be
+    # swallowed and the healthy client still updated.
+    _run(rm.handle("bene-1", alive, "u1", {"type": "join"}, role="tecnico"))
+    assert alive.sent[-1]["participants"][0]["user_id"] == "u1"
+
+    # The dead connection was pruned, so a later broadcast still reaches the alive one
+    # (and never retries the gone socket).
+    _run(rm.handle("bene-1", alive, "u1", {"type": "ready"}))
+    assert alive.sent[-1]["ready_count"] == 1
+
+
+def _open_round_two_ready(rm, conn_by_user):
+    """Drive a Bene to an open Round 1 with the given {user_id: connection} ready."""
+    for user_id, conn in conn_by_user.items():
+        _run(rm.connect("bene-1", conn, user_id))
+    for user_id, conn in conn_by_user.items():
+        _run(rm.handle("bene-1", conn, user_id, {"type": "join"}, role="tecnico"))
+        _run(rm.handle("bene-1", conn, user_id, {"type": "ready"}))
+    first = next(iter(conn_by_user))
+    _run(rm.handle("bene-1", conn_by_user[first], first, {"type": "start"}))
+
+
+def test_chat_unlocks_after_voting_and_broadcasts_anonymously():
+    """A roster member who has voted may post to the Chat; the message is re-broadcast
+    carrying only the Round number + body (never an author), and a participant who has
+    NOT voted does not receive the Chat content at all — vote independence enforced at
+    the wire, not just in the UI."""
+    rm = _manager()
+    voter, watcher = FakeConn(), FakeConn()
+    _open_round_two_ready(rm, {"u1": voter, "u2": watcher})
+    _run(rm.handle("bene-1", voter, "u1", {"type": "vote", "vocazione": "residenziale"}))
+
+    _run(rm.handle("bene-1", voter, "u1", {"type": "chat", "body": "  io voto residenziale  "}))
+
+    msg = voter.sent[-1]["chat"][-1]
+    assert msg["body"] == "io voto residenziale"  # trimmed
+    assert msg["round_number"] == 1
+    assert "author_id" not in msg and "author" not in msg
+    assert watcher.sent[-1]["chat"] == []  # u2 has not voted → sees no Chat
+
+
+def test_chat_post_before_voting_is_rejected_and_not_broadcast():
+    """The store's write-gate is enforced at the room edge: a member who has not voted
+    cannot post — the sender alone gets an error, no one else sees a broadcast."""
+    rm = _manager()
+    a, b = FakeConn(), FakeConn()
+    _open_round_two_ready(rm, {"u1": a, "u2": b})
+    before_b = len(b.sent)
+
+    _run(rm.handle("bene-1", a, "u1", {"type": "chat", "body": "prima di votare"}))
+
+    assert a.sent[-1] == {
+        "type": "error",
+        "detail": "cannot post before voting this Round: 'u1'",
+    }
+    assert len(b.sent) == before_b
+
+
+def test_chat_is_readable_in_recap_but_read_only():
+    """Once the Round closes the Chat is readable by everyone in the recap, but a post
+    is rejected (read-only in phase 3) and errors only the sender."""
+    rm = _manager()
+    a, b = FakeConn(), FakeConn()
+    _open_round_two_ready(rm, {"u1": a, "u2": b})
+    _run(rm.handle("bene-1", a, "u1", {"type": "vote", "vocazione": "residenziale"}))
+    _run(rm.handle("bene-1", a, "u1", {"type": "chat", "body": "ci penso"}))
+    _run(rm.handle("bene-1", b, "u2", {"type": "vote", "vocazione": "commerciale"}))  # N/N → recap
+
+    assert b.sent[-1]["phase"] == "recap"
+    assert [m["body"] for m in b.sent[-1]["chat"]] == ["ci penso"]  # readable now
+
+    before_a = len(a.sent)
+    _run(rm.handle("bene-1", a, "u1", {"type": "chat", "body": "troppo tardi"}))
+
+    assert a.sent[-1]["type"] == "error"  # read-only in recap
+    assert len(a.sent) == before_a + 1  # only the error, no broadcast
+
+    msg = "empty chat message → rejected without touching the log"
+    _run(rm.handle("bene-1", a, "u1", {"type": "chat", "body": "   "}))
+    assert a.sent[-1] == {"type": "error", "detail": "messaggio vuoto"}, msg

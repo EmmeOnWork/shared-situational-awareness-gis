@@ -17,14 +17,23 @@ export interface RoundParticipant {
 }
 
 export interface RecapPayload {
-    radar: { role: string; consensus: number }[];
+    radar: { role: string; consensus: number; count: number }[];
     overall: number;
     n: number;
 }
 
+/** One anonymous Chat message as the room broadcasts it: NO author, just the Round
+ *  it was posted in, the body and an ISO timestamp. Present only when this client
+ *  may read the Chat (after it has voted, or in the recap); empty otherwise. */
+export interface ChatMessage {
+    round_number: number;
+    body: string;
+    timestamp: string;
+}
+
 export interface RoundView {
     poi_id: number;
-    phase: "lobby" | "voting" | "recap";
+    phase: "lobby" | "voting" | "recap" | "consensus";
     round_number: number;
     ready_count: number;
     n: number;
@@ -33,6 +42,10 @@ export interface RoundView {
     voted_user_ids: string[];
     participants: RoundParticipant[];
     recap: RecapPayload | null;
+    // The terminal phase-4 payload (present only when phase === "consensus"): the
+    // winning Vocazione the group converged on and how many Rounds it took.
+    consensus: { winner: string; rounds: number } | null;
+    chat: ChatMessage[];
 }
 
 export type ServerMessage =
@@ -97,6 +110,13 @@ export class RoundClient {
 
     vote(vocazione: string): void {
         this.send({ type: "vote", vocazione });
+    }
+
+    /** Post one anonymous Chat message. The server gates it (rejected unless this
+     *  user has already voted in the open Round) and fans the anonymised message
+     *  back out to every eligible reader. */
+    chat(body: string): void {
+        this.send({ type: "chat", body });
     }
 
     /** Send any messages buffered while the socket was connecting. Call on `open`. */

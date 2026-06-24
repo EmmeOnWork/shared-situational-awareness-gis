@@ -56,7 +56,9 @@ async def round_room(websocket: WebSocket, poi_id: int):
     role = payload.get("stakeholder_role")
     accepted = TOKEN_SUBPROTOCOL if TOKEN_SUBPROTOCOL in offered else None
     await websocket.accept(subprotocol=accepted)
-    await rooms.connect(poi_id, websocket)
+    # Pass the handshake identity so the room can gate this connection's Chat view on
+    # whether THIS user has voted (vote independence enforced at the wire).
+    await rooms.connect(poi_id, websocket, user_id)
     try:
         while True:
             message = await websocket.receive_json()

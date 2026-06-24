@@ -30,29 +30,14 @@
 import { notifierWsUrl, parseNotification, SEVERITY_COLOUR } from "./notification.ts";
 import { NotifierAudio } from "./audio.ts";
 import { shouldRender } from "./scope-filter.ts";
-import { readSelection, type SelectionAxis } from "./selection-bus.ts";
+import { currentSelectionId } from "./current-selection.ts";
+import { type SelectionAxis } from "./selection-bus.ts";
 
 const TOAST_TTL_MS = 5000;
 // How long the fade-in / fade-out transition runs. Kept in sync with the CSS
 // `transition` duration so a dismissed toast is removed from the DOM only after
 // it has finished fading.
 const TOAST_FADE_MS = 320;
-
-/**
- * The receiver's current selection on `axis`, as the string id a Notification's
- * `scope.value` is compared against. A scope value is a Bene id (a string); the
- * Active Workshop on the bus is the selected Bene — its `poiId` (a Bene IS a POI),
- * or already an id. `null`/`undefined` (cleared / never selected) pass through so
- * scope-filter suppresses the scoped Notification.
- */
-function currentSelectionId(axis: SelectionAxis): string | null | undefined {
-    const value = readSelection<unknown>(axis);
-    if (value == null) return value as null | undefined;
-    if (typeof value === "object" && "poiId" in value) {
-        return String((value as { poiId: unknown }).poiId);
-    }
-    return String(value);
-}
 
 class NotificationOverlay extends HTMLElement {
     static get observedAttributes() {

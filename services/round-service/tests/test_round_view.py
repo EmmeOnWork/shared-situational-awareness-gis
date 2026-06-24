@@ -84,6 +84,10 @@ def test_recap_view_carries_radar_and_consenso_totale():
     assert {b["role"] for b in recap["radar"]} == {"istituzionale", "economico"}
     assert all(0.0 <= b["consensus"] <= 1.0 for b in recap["radar"])
     assert 0.0 <= recap["overall"] <= 1.0
+    # Each radar branch carries its headcount (the 'es. 3 tecnici' the fullscreen
+    # radar shows); here one voter per Role, summing to N.
+    assert all(b["count"] == 1 for b in recap["radar"])
+    assert sum(b["count"] for b in recap["radar"]) == view["n"]
 
 
 def test_terminal_view_shows_winner_and_round_count_no_new_round():

@@ -28,6 +28,8 @@ const LOBBY: RoundView = {
     voted_user_ids: [],
     participants: [],
     recap: null,
+    consensus: null,
+    chat: [],
 };
 
 test("parseServerMessage reads a view frame", () => {
@@ -57,12 +59,14 @@ test("each action sends exactly the message the RoomManager expects", () => {
     client.ready();
     client.start();
     client.vote("re-star-borgo");
+    client.chat("io voto re-star-borgo");
 
     assert.deepEqual(sent.map((s) => JSON.parse(s)), [
         { type: "join" },
         { type: "ready" },
         { type: "start" },
         { type: "vote", vocazione: "re-star-borgo" },
+        { type: "chat", body: "io voto re-star-borgo" },
     ]);
 });
 

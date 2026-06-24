@@ -14,9 +14,16 @@ adapter that wires real connections, the real repo and ``time.monotonic``.
 """
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from time import monotonic
 from typing import Callable
 
+from src.chat.chat_store import (
+    ChatLog,
+    append as chat_append,
+    empty_chat,
+    read as chat_read,
+)
 from src.engine.recap import RoundOutcome, build_outcome
 from src.engine.round_engine import (
     CastVote,
@@ -33,14 +40,23 @@ from src.engine.round_engine import (
 from src.engine.round_view import project_view
 
 
+def _utcnow() -> datetime:
+    """Wall-clock UTC for Chat timestamps — distinct from the monotonic ``now`` the
+    room uses for Round durations (which must be gap-free, not wall-clock)."""
+    return datetime.now(timezone.utc)
+
+
 @dataclass
 class Room:
-    """A Bene's live room: its process state, open connections, the last recap
-    outcome (so a client joining in the recap phase still sees the radar) and the
-    monotonic timestamp the current Round opened at (for duration)."""
+    """A Bene's live room: its process state, the anonymous Chat log (continuous
+    across all the Bene's Rounds), the open connections mapped to their handshake
+    ``user_id`` (so each can be sent a Chat view gated on whether *they* have voted),
+    the last recap outcome (so a client joining in the recap phase still sees the
+    radar) and the monotonic timestamp the current Round opened at (for duration)."""
 
     state: ProcessState
-    connections: set = field(default_factory=set)
+    chat: ChatLog
+    members: dict = field(default_factory=dict)  # connection -> user_id
     outcome: RoundOutcome | None = None
     opened_at: float | None = None
 
@@ -62,6 +78,19 @@ def _to_event(user_id: str, role: str | None, message: dict):
     raise ValueError(f"unknown message type: {kind!r}")
 
 
+def _chat_visible(state: ProcessState, user_id: str | None) -> bool:
+    """Who may READ the Chat. Mirrors the store's WRITE gate so no one can read
+    others' arguments before voting (Vote independence): during ``voting`` only a
+    participant who has already cast their Vote sees it; in the ``recap`` AND the
+    terminal ``consensus`` phase everyone does (the Round is closed, all Votes are in —
+    the deliberation log is read-only). Hidden in the lobby."""
+    if state.phase in ("recap", "consensus"):
+        return True
+    if state.phase == "voting":
+        return user_id is not None and user_id in state.votes
+    return False
+
+
 class _NullNotifier:
     """No-op producer: the default when a RoomManager is built without a notifier
     (e.g. persistence-focused unit tests). Swallows every lifecycle effect."""
@@ -71,9 +100,18 @@ class _NullNotifier:
 
 
 class RoomManager:
-    def __init__(self, repo, now: Callable[[], float] = monotonic, notifier=None):
+    def __init__(
+        self,
+        repo,
+        now: Callable[[], float] = monotonic,
+        notifier=None,
+        chat_now: Callable[[], datetime] = _utcnow,
+    ):
         self._repo = repo
         self._now = now
+        # Wall-clock for Chat message timestamps (injectable for tests); separate
+        # from the monotonic ``now`` used for Round durations.
+        self._chat_now = chat_now
         # The Notification producer (lifecycle effects → Realtime Notifier). Defaults
         # to a no-op so persistence-only tests need not wire one; the WS route injects
         # the real producer. Best-effort, exactly like ``repo``.
@@ -83,21 +121,23 @@ class RoomManager:
     def _room(self, poi_id: str) -> Room:
         room = self._rooms.get(poi_id)
         if room is None:
-            room = Room(state=initial_state(poi_id))
+            room = Room(state=initial_state(poi_id), chat=empty_chat(poi_id))
             self._rooms[poi_id] = room
         return room
 
-    async def connect(self, poi_id: str, connection) -> None:
-        """Register a connection and immediately send it the room's current view."""
+    async def connect(self, poi_id: str, connection, user_id: str | None = None) -> None:
+        """Register a connection (under its handshake ``user_id``) and immediately send
+        it the room's current view, gated to that user (so the Chat is hidden until
+        they have voted)."""
         room = self._room(poi_id)
-        room.connections.add(connection)
-        await connection.send_json(self._view(room))
+        room.members[connection] = user_id
+        await connection.send_json(self._view(room, user_id))
 
     def disconnect(self, poi_id: str, connection) -> None:
         """Drop a gone connection so it receives no further broadcasts."""
         room = self._rooms.get(poi_id)
         if room is not None:
-            room.connections.discard(connection)
+            room.members.pop(connection, None)
 
     async def handle(
         self,
@@ -113,6 +153,11 @@ class RoomManager:
         back to the sending ``connection`` alone and leaves the room (and every other
         client) unchanged."""
         room = self._room(poi_id)
+        # A Chat post is not an engine event (it never changes the ProcessState): it
+        # is gated and appended to the Bene's Chat log separately, then re-broadcast.
+        if message.get("type") == "chat":
+            await self._handle_chat(room, connection, user_id, message)
+            return
         try:
             event = _to_event(user_id, role, message)
             state, effects = apply(room.state, event)
@@ -123,6 +168,25 @@ class RoomManager:
         room.state = state
         for effect in effects:
             await self._react(room, effect)
+        await self._broadcast(room)
+
+    async def _handle_chat(self, room: Room, connection, user_id: str, message: dict) -> None:
+        """Append one anonymous Chat message, gated by the store on the current state
+        (the author must have voted this Round). A rejected post errors only the
+        sender; a successful one re-broadcasts so the message appears live for every
+        eligible reader."""
+        body = message.get("body")
+        if not isinstance(body, str) or not body.strip():
+            await connection.send_json({"type": "error", "detail": "messaggio vuoto"})
+            return
+        try:
+            log, _effects = chat_append(
+                room.chat, room.state, user_id, body.strip(), now=self._chat_now()
+            )
+        except ValueError as exc:
+            await connection.send_json({"type": "error", "detail": str(exc)})
+            return
+        room.chat = log
         await self._broadcast(room)
 
     async def _react(self, room: Room, effect) -> None:
@@ -146,11 +210,30 @@ class RoomManager:
         # ignores everything else (a Vote emits no effect, so it never publishes).
         await self._notifier.react(effect)
 
-    def _view(self, room: Room) -> dict:
-        outcome = room.outcome if room.state.phase == "recap" else None
-        return project_view(room.state, outcome=outcome)
+    def _view(self, room: Room, user_id: str | None) -> dict:
+        """Project the room for one recipient. The recap radar (the saved ``outcome``)
+        is carried in BOTH the recap and the terminal consensus phase, so the consensus
+        screen is the same as the recap (minus any 'continue'). The Chat is included
+        only when that recipient may read it (post-vote / recap / consensus); everyone
+        else gets an empty Chat, so vote independence holds at the wire, not just the UI."""
+        outcome = room.outcome if room.state.phase in ("recap", "consensus") else None
+        chat = chat_read(room.chat) if _chat_visible(room.state, user_id) else ()
+        return project_view(room.state, outcome=outcome, chat=chat)
 
     async def _broadcast(self, room: Room) -> None:
-        view = self._view(room)
-        for connection in list(room.connections):
-            await connection.send_json(view)
+        """Fan out a per-recipient view to every connection (each sees the Chat only
+        if eligible — hence one projection per member, not one shared view).
+
+        A send to a connection that has gone away (a reconnect / refresh / Bene-switch
+        race can leave a stale member for an instant) must NEVER break the fan-out to
+        the healthy connections nor crash the caller — that would propagate out of
+        ``handle``, tear down the *triggering* client's socket and silently stop its
+        live updates. So a failed send just drops that connection from the room."""
+        dead = []
+        for connection, user_id in list(room.members.items()):
+            try:
+                await connection.send_json(self._view(room, user_id))
+            except Exception:  # noqa: BLE001 — a gone connection must not break the room
+                dead.append(connection)
+        for connection in dead:
+            room.members.pop(connection, None)
