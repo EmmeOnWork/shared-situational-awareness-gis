@@ -25,6 +25,7 @@ services:
       VOCAZIONE_UPSTREAM: "http://vocazione-service:28003"
       NOTIFICATIONS_UPSTREAM: "http://notification-service:28004"
       ROUND_UPSTREAM: "http://round-service:28005"
+      GEO_LAYERS_UPSTREAM: "http://geo-layers-service:28006"
       MONOLITH_UPSTREAM: "http://ju-backend:8000"
       FRONTEND_UPSTREAM: "http://janus-dashboard-ui:3000"
     volumes:
@@ -38,6 +39,7 @@ services:
       - vocazione-service
       - notification-service
       - round-service
+      - geo-layers-service
       - ju-backend
       - janus-dashboard-ui
     networks:
@@ -300,6 +302,57 @@ services:
       - "/schema/round-schema.sql"
     volumes:
       - ./services/round-service/db/round-schema.sql:/schema/round-schema.sql:ro
+    networks:
+      - janus-net
+    restart: "no"
+
+  geo-layers-service:
+    build:
+      context: ./services/geo-layers-service
+      dockerfile: Dockerfile
+    # No published ports: reachable only through the gateway (ADR-0002).
+    environment:
+      # Local postgres (ju-postgres); lazily connected, so /health answers even
+      # before it is reachable. Same fallback as the siblings.
+      DATABASE_URL: "${DATABASE_URL:-postgresql+psycopg://janus:CHANGE_ME@ju-postgres:5432/janus}"
+      # Verifies the monolith's HS256 JWT (auth-only data route): same local key as
+      # the siblings, so a monolith-issued token authenticates end-to-end.
+      JWT_ALGORITHM: "${JWT_ALGORITHM:-HS256}"
+      JWT_VERIFICATION_KEY: "${JWT_VERIFICATION_KEY:-CHANGE_ME}"
+    depends_on:
+      ju-postgres:
+        condition: service_healthy
+      geo-layers-schema-init:
+        condition: service_completed_successfully
+    networks:
+      - janus-net
+    restart: unless-stopped
+
+  # One-shot: ensures the geo-layers table exists (empty) on every bring-up.
+  # Idempotent (CREATE TABLE IF NOT EXISTS), loads NO data — the civics are loaded
+  # separately by db/load_civics.py (see the service README). Mirrors the sibling
+  # schema-init one-shots; reuses the postgis image already pulled for ju-postgres.
+  geo-layers-schema-init:
+    image: postgis/postgis:17-3.5
+    depends_on:
+      ju-postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-CHANGE_ME}
+    entrypoint: ["psql"]
+    command:
+      - "-h"
+      - "ju-postgres"
+      - "-U"
+      - "${POSTGRES_USER:-janus}"
+      - "-d"
+      - "${POSTGRES_DB:-janus}"
+      - "-v"
+      - "ON_ERROR_STOP=1"
+      - "-f"
+      - "/schema/schema.sql"
+    volumes:
+      - ./services/geo-layers-service/db/schema.sql:/schema/schema.sql:ro
     networks:
       - janus-net
     restart: "no"
