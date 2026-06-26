@@ -1,16 +1,16 @@
 """Auth: verify the monolith's HS256 access token (this service issues none).
 
-Auth-only by design: any logged-in monolith user may read the public fixed-network
-coverage layer, so NO extra scope is required — nothing to grant in the monolith
-(keeps the monolith untouched). Mirrors the monolith's verify contract (copied,
-not imported — ADR-0001): reject a token missing the ``role`` claim.
+Auth-only by design: any logged-in monolith user may read the public map layers,
+so NO extra scope is required — nothing to grant in the monolith (keeps the
+monolith untouched). Mirrors the monolith's verify contract (copied, not imported
+— ADR-0001): reject a token missing the ``role`` claim.
 """
 
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
-from src.settings import get_settings
+from src.core.settings import get_settings
 
 # auto_error=False so we send our own 401 with a WWW-Authenticate header.
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)

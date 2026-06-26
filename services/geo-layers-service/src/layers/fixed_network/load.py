@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 """One-off loader: under-1Gb civic addresses CSV -> public.fixed_network_under_1gb.
 
-Self-contained (stdlib + psycopg, already in the service image), so it runs the
-same way in the container or a local venv. Reads the "Allegato A" CSV (latin-1,
+Self-contained (stdlib + psycopg, already in the service image), so it is baked
+into the image and runs as a module. Reads the "Allegato A" CSV (latin-1,
 semicolon-separated, comma decimals), keeps one region, and upserts by id_egon so
 re-running refreshes. The table comes up empty with the compose schema-init; this
 loads its rows (the compose brings up the schema, not the data — ADR-0001).
 
-Usage (inside the running stack — the service image has psycopg):
+Usage (inside the running stack — the CSV is the only thing to copy in):
 
     docker compose cp "data/Copertura_Digitale/Rete_Fissa_Sotto_1Gb/Allegato A_mapp707K.csv" \
         geo-layers-service:/tmp/civics.csv
-    docker compose cp services/geo-layers-service/db/load_civics.py \
-        geo-layers-service:/tmp/load_civics.py
-    docker compose exec geo-layers-service python /tmp/load_civics.py /tmp/civics.csv --region CAMPANIA
+    docker compose exec geo-layers-service \
+        python -m src.layers.fixed_network.load /tmp/civics.csv --region CAMPANIA
 """
 
 from __future__ import annotations

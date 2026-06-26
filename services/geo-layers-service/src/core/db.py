@@ -10,9 +10,25 @@ from typing import Iterator, Optional
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from src.settings import get_settings
+from src.core.settings import get_settings
 
-__all__ = ["get_session_context", "text"]
+__all__ = ["COMUNE_BOUNDARY_CTE", "get_session_context", "text"]
+
+# Boundary of the clicked comune (Administrative Boundary, area_type_id = 3) for a
+# bound :region_id — the SAME regions -> region_areas -> areas join the monolith's
+# POI/areas layers use, in the shared public schema (ADR-0001). Every layer route
+# prepends this CTE and filters/clips its features to `comune.geom`, so one map
+# click scopes every layer to the same comune. ST_Union folds a multi-row boundary
+# into a single geometry.
+COMUNE_BOUNDARY_CTE = """
+WITH comune AS (
+    SELECT ST_Union(a.geom) AS geom
+    FROM regions r
+    JOIN region_areas ra ON ra.region_id = r.id
+    JOIN areas a ON ra.area_id = a.id AND a.area_type_id = 3
+    WHERE r.id = :region_id
+)
+"""
 
 _session_factory: Optional[sessionmaker] = None
 

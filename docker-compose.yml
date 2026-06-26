@@ -328,9 +328,10 @@ services:
       - janus-net
     restart: unless-stopped
 
-  # One-shot: ensures the geo-layers table exists (empty) on every bring-up.
-  # Idempotent (CREATE TABLE IF NOT EXISTS), loads NO data — the civics are loaded
-  # separately by db/load_civics.py (see the service README). Mirrors the sibling
+  # One-shot: ensures every geo-layers table exists (empty) on each bring-up by
+  # applying each layer's schema.sql (src/layers/<name>/schema.sql). Idempotent
+  # (CREATE TABLE IF NOT EXISTS), loads NO data — each layer's data is loaded
+  # separately (ogr2ogr / load.py, see the service README). Mirrors the sibling
   # schema-init one-shots; reuses the postgis image already pulled for ju-postgres.
   geo-layers-schema-init:
     image: postgis/postgis:17-3.5
@@ -338,21 +339,15 @@ services:
       ju-postgres:
         condition: service_healthy
     environment:
+      PGHOST: ju-postgres
+      PGUSER: ${POSTGRES_USER:-janus}
+      PGDATABASE: ${POSTGRES_DB:-janus}
       PGPASSWORD: ${POSTGRES_PASSWORD:-CHANGE_ME}
-    entrypoint: ["psql"]
+    entrypoint: ["sh", "-c"]
     command:
-      - "-h"
-      - "ju-postgres"
-      - "-U"
-      - "${POSTGRES_USER:-janus}"
-      - "-d"
-      - "${POSTGRES_DB:-janus}"
-      - "-v"
-      - "ON_ERROR_STOP=1"
-      - "-f"
-      - "/schema/schema.sql"
+      - 'for f in /schema/*/schema.sql; do echo "applying $$f"; psql -v ON_ERROR_STOP=1 -f "$$f" || exit 1; done'
     volumes:
-      - ./services/geo-layers-service/db/schema.sql:/schema/schema.sql:ro
+      - ./services/geo-layers-service/src/layers:/schema:ro
     networks:
       - janus-net
     restart: "no"
