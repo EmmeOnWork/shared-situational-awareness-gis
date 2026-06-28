@@ -39,37 +39,70 @@ const CLEAR_ID = ""; // the clear entry's data-id: empty slug === "show all"
 const MENU_ID = "vocazione-menu";
 
 const STYLES = `
-    :host { display: block; height: 100%; font-family: system-ui, sans-serif; color: #f9fafb; }
+    :host {
+        display: block; height: 100%; font-family: inherit;
+        /* Mirror the dashboard's shadcn tokens so the trigger matches its Select
+           control. Light defaults; dark via prefers-color-scheme below — which tracks
+           the app's default "system" theme. */
+        --fg: oklch(0.145 0 0);
+        --muted-fg: oklch(0.556 0 0);
+        --input-border: oklch(0.922 0 0);
+        --control-bg: transparent;
+        --control-bg-hover: oklch(0.97 0 0);
+        --menu-bg: oklch(1 0 0);
+        --menu-border: oklch(0.922 0 0);
+        --option-hover: oklch(0.97 0 0);
+        --option-selected: oklch(0.97 0 0);
+        color: var(--fg);
+    }
+    @media (prefers-color-scheme: dark) {
+        :host {
+            --fg: oklch(0.985 0 0);
+            --muted-fg: oklch(0.708 0 0);
+            --input-border: oklch(1 0 0 / 15%);
+            --control-bg: oklch(1 0 0 / 4%);
+            --control-bg-hover: oklch(1 0 0 / 8%);
+            --menu-bg: oklch(0.205 0 0);
+            --menu-border: oklch(1 0 0 / 10%);
+            --option-hover: oklch(1 0 0 / 8%);
+            --option-selected: oklch(0.279 0 0);
+        }
+    }
     .wrap { height: 100%; padding: 12px; box-sizing: border-box; }
+    /* In the map's Lenses dock the host carries data-variant="control": drop the card
+       padding so the trigger fills a 32px slot, flush like the dashboard's Select. */
+    :host([data-variant="control"]) .wrap { padding: 0; }
 
-    /* Trigger: shows the current Vocazione (or a placeholder) and toggles the menu
-       declaratively via popovertarget — the browser handles invoker toggling. */
-    .select { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 12px;
-              border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; background: rgba(255,255,255,0.05);
-              color: #fff; font: inherit; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer; }
-    .select:hover { background: rgba(255,255,255,0.09); }
+    /* Trigger: matched to the shadcn Select trigger (size sm) — h-8, rounded-md,
+       border-input, text-sm. Toggles the menu declaratively via popovertarget. */
+    .select { display: flex; align-items: center; gap: 8px; width: 100%; height: 32px;
+              padding: 0 12px; box-sizing: border-box; border: 1px solid var(--input-border);
+              border-radius: 8px; background: var(--control-bg); color: var(--fg);
+              font: inherit; font-size: 14px; font-weight: 400; text-align: left; cursor: pointer;
+              box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05); }
+    .select:hover { background: var(--control-bg-hover); }
     .select .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .select .label.placeholder { color: #cbd5e1; font-weight: 500; }
-    .chev { flex: 0 0 auto; color: #cbd5e1; transition: transform 0.15s; }
+    .select .label.placeholder { color: var(--muted-fg); }
+    .chev { flex: 0 0 auto; width: 16px; height: 16px; opacity: 0.5; color: var(--fg); transition: transform 0.15s; }
     .select[aria-expanded="true"] .chev { transform: rotate(180deg); }
 
     /* Menu: a top-layer popover. Position (top/left/width/max-height) is set in JS
        from the trigger rect; the top layer is viewport-relative, so it is immune to
        the host card's overflow and the grid item's transform — it can spill outside
-       the widget. UA gives display + light-dismiss; we just reset its box. */
+       the widget. Theme-aware to mirror the Select dropdown. */
     .menu { margin: 0; inset: auto; position: fixed; padding: 4px; box-sizing: border-box; overflow-y: auto;
-            border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; background: #111827; color: #f9fafb;
-            box-shadow: 0 12px 30px rgba(0,0,0,0.5); }
+            border: 1px solid var(--menu-border); border-radius: 8px; background: var(--menu-bg); color: var(--fg);
+            box-shadow: 0 12px 30px rgba(0,0,0,0.3); }
     .option { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: none;
-              border-radius: 6px; background: transparent; color: #f9fafb; font: inherit; font-size: 13px;
+              border-radius: 6px; background: transparent; color: var(--fg); font: inherit; font-size: 14px;
               text-align: left; cursor: pointer; }
-    .option:hover { background: rgba(255,255,255,0.08); }
-    .option[aria-selected="true"] { background: rgba(96,165,250,0.18); color: #fff; }
+    .option:hover { background: var(--option-hover); }
+    .option[aria-selected="true"] { background: var(--option-selected); color: var(--fg); }
     .option .name { flex: 1; min-width: 0; }
     .option .check { flex: 0 0 auto; color: #60a5fa; visibility: hidden; }
     .option[aria-selected="true"] .check { visibility: visible; }
     /* The clear entry sits apart from the 16, with a hairline divider below it. */
-    .option.clear { color: #cbd5e1; border-bottom: 1px solid rgba(255,255,255,0.10); border-radius: 0; margin-bottom: 4px; }
+    .option.clear { color: var(--muted-fg); border-bottom: 1px solid var(--menu-border); border-radius: 0; margin-bottom: 4px; }
 `;
 
 class VocazioneWidget extends HTMLElement {

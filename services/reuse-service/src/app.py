@@ -54,7 +54,14 @@ def widget_bundle():
             status_code=503,
             content={"detail": "UI bundle not built; run `make ui`."},
         )
-    return FileResponse(WIDGET_BUNDLE, media_type="application/javascript")
+    # ``no-cache`` = the browser must REVALIDATE before reusing a cached copy, so it
+    # can never serve a stale widget after a redeploy (the bug we hit on the sibling
+    # Widgets). At a few KB the re-send on revalidation is negligible.
+    return FileResponse(
+        WIDGET_BUNDLE,
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 # Reuse data routes are guarded at the router level by the reuse:read scope,
