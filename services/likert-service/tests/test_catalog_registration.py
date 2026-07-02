@@ -19,6 +19,12 @@ def test_catalog_row_carries_the_remote_pointer():
     assert remote == {"src": "/likert/widget.js", "tag": "likert-widget"}
 
 
+def test_catalog_row_declares_role_visibility():
+    """Role-based visibility: the Gradimento is relevant to the institutional and
+    economic stakeholders, not the technical one (stakeholder_role gating)."""
+    assert _CATALOG_ROW["allowed_roles"] == ["istituzionale", "economico"]
+
+
 def test_registration_skipped_when_disabled():
     """With the kill-switch off, registration is a no-op (no DB touched)."""
     get_settings.cache_clear()

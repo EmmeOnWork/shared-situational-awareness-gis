@@ -11,7 +11,7 @@
 -- involved — registration is data.
 
 INSERT INTO dashboards_config.widget_types
-    (type, label, description, category, default_props, sort_order)
+    (type, label, description, category, default_props, sort_order, allowed_roles)
 VALUES (
     'likert',
     'Scala Likert',
@@ -23,7 +23,11 @@ VALUES (
             "remote": {"src": "/likert/widget.js", "tag": "likert-widget"}
         }
     }'::jsonb,
-    96
+    96,
+    -- Role-based visibility (stakeholder_role): relevant to institutional and
+    -- economic stakeholders, not the technical one. NULL would mean "all roles".
+    '{istituzionale,economico}'::text[]
 )
 ON CONFLICT (type) DO UPDATE
-    SET default_props = EXCLUDED.default_props;
+    SET default_props = EXCLUDED.default_props,
+        allowed_roles = EXCLUDED.allowed_roles;

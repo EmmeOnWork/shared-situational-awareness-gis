@@ -11,7 +11,7 @@
 -- is involved — registration is data.
 
 INSERT INTO dashboards_config.widget_types
-    (type, label, description, category, default_props, sort_order)
+    (type, label, description, category, default_props, sort_order, allowed_roles)
 VALUES (
     'prezzari',
     'I Prezziari',
@@ -23,7 +23,11 @@ VALUES (
             "remote": {"src": "/prezzari/widget.js", "tag": "prezzari-widget"}
         }
     }'::jsonb,
-    95
+    95,
+    -- Role-based visibility (stakeholder_role): the price lists support economic
+    -- pre-feasibility reasoning, so only the economic stakeholder sees them.
+    '{economico}'::text[]
 )
 ON CONFLICT (type) DO UPDATE
-    SET default_props = EXCLUDED.default_props;
+    SET default_props = EXCLUDED.default_props,
+        allowed_roles = EXCLUDED.allowed_roles;

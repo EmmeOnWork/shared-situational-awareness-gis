@@ -19,6 +19,12 @@ def test_catalog_row_carries_the_remote_pointer():
     assert remote == {"src": "/prezzari/widget.js", "tag": "prezzari-widget"}
 
 
+def test_catalog_row_declares_role_visibility():
+    """Role-based visibility: the price lists support economic pre-feasibility
+    reasoning, so only the economic stakeholder sees them (stakeholder_role gating)."""
+    assert _CATALOG_ROW["allowed_roles"] == ["economico"]
+
+
 def test_registration_skipped_when_disabled():
     """With the kill-switch off, registration is a no-op (no DB touched)."""
     get_settings.cache_clear()

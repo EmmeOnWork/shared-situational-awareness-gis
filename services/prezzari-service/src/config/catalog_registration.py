@@ -20,6 +20,8 @@ apply ``catalog/widget-type.sql`` instead, or set ``REGISTER_IN_CATALOG=false``.
 import json
 import logging
 
+from sqlalchemy import ARRAY, String, bindparam
+
 from src.config import get_settings
 from src.config.pgsql_config import get_session_context, text
 
@@ -45,6 +47,9 @@ _CATALOG_ROW = {
         },
     },
     "sort_order": 95,
+    # Role-based visibility (stakeholder_role): the price lists support economic
+    # pre-feasibility reasoning, so only the economic stakeholder sees them.
+    "allowed_roles": ["economico"],
 }
 
 # Ensure the catalog table exists before inserting, so registration does NOT
@@ -62,23 +67,30 @@ _ENSURE_CATALOG = text(
         category      text,
         default_props jsonb NOT NULL DEFAULT '{}'::jsonb,
         enabled       boolean NOT NULL DEFAULT true,
-        sort_order    integer NOT NULL DEFAULT 0
+        sort_order    integer NOT NULL DEFAULT 0,
+        allowed_roles text[]
     );
+    ALTER TABLE dashboards_config.widget_types
+        ADD COLUMN IF NOT EXISTS allowed_roles text[];
     """
 )
 
-# Same upsert shape the monolith uses: refresh only the code-owned `default_props`
-# on conflict, leaving operator-owned presentation columns (label/category/…) be.
+# Same upsert shape the monolith uses: on conflict refresh only the code-owned
+# columns — `default_props` and this Widget's role policy `allowed_roles` — leaving
+# operator-owned presentation columns (label/category/…) be. `allowed_roles` is bound
+# as a text[] so the Python list maps to the Postgres array column.
 _UPSERT = text(
     """
     INSERT INTO dashboards_config.widget_types
-        (type, label, description, category, default_props, sort_order)
+        (type, label, description, category, default_props, sort_order, allowed_roles)
     VALUES
-        (:type, :label, :description, :category, CAST(:default_props AS jsonb), :sort_order)
+        (:type, :label, :description, :category, CAST(:default_props AS jsonb),
+         :sort_order, :allowed_roles)
     ON CONFLICT (type) DO UPDATE
-        SET default_props = EXCLUDED.default_props
+        SET default_props = EXCLUDED.default_props,
+            allowed_roles = EXCLUDED.allowed_roles
     """
-)
+).bindparams(bindparam("allowed_roles", type_=ARRAY(String)))
 
 
 def register_in_catalog() -> bool:
