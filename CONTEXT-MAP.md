@@ -40,6 +40,27 @@ the monolith's code. Each Widget owns its own language.
   distributions + timings) — unlike every prior Widget. Serves its **own WebSocket with
   a per-Bene room** for live state, and is the server-side **producer** of round
   Notifications to the Realtime Notifier.
+- [Scala Likert](./services/likert-service/CONTEXT.md) (`likert-service`; prefix
+  `/likert`, *in design*) — a read-mostly **gauge** Widget that shows the **Gradimento**:
+  how well-received the **Active Vocazione** is on the **clicked comune**, as the
+  volume-weighted average of the online review stars of that Vocazione's **Competitors**
+  (the same set the Concorrenza map layer paints). A **third consumer pairing** —
+  *Active Vocazione × clicked comune* — distinct from the sensitive *Active Workshop*
+  widgets; it ignores the Active Workshop entirely. **Keeps its own cache** of the
+  external ratings (background-refreshed) — the second Widget to own tables and the
+  first to depend on an **external ratings provider** — but never edits the monolith.
+- [I Prezziari](./services/prezzari-service/CONTEXT.md) (`prezzari-service`; prefix
+  `/prezzari`, *in design*) — a **read-only, stores-a-snapshot** Widget that shows **two
+  reference price lists side by side** to support reasoning about the **economic
+  pre-feasibility of reusing** a building: the **Prezziario di Locazione** (Agenzia
+  Entrate **OMI** rental quotations for the clicked comune — the market-rent pan) next to
+  the **Prezzario dei Lavori** (a curated renovation slice of the **Regione Campania**
+  price list — the works-cost pan). A **comune-scoped** consumer of the clicked point
+  (like the Scala Likert), it **ignores the Active Workshop**. The "balance" between the
+  pans is the **human reading**, not a computed metric — the Widget does **no maths** and
+  merges nothing. **Owns tables** but holds **static versioned snapshots** (latest edition
+  only, Campania-only), re-ingested manually with **no runtime calls** to the source sites
+  and **no refresh worker / TTL** — unlike the Scala Likert's background-refreshed provider.
 
 ## Relationships
 
@@ -96,6 +117,32 @@ the monolith's code. Each Widget owns its own language.
   (Participants, Roles, Rounds, Votes, Chat, raw outcome distributions + timings). It
   runs its **own per-Bene WebSocket** (its own context ADR-0001), the first server-side
   shared mutable state in the stack — distinct from the Notifier's roomless broadcast.
+- **Scala Likert → Vocazione Selector + Concorrenza bridge**: consumes the **Active
+  Vocazione** off the selection bus and reuses the monolith's Vocazione→Competitor
+  mapping (the `vocazione_competitors` prefix map + the comune-scoped POI join the
+  Concorrenza layer uses) to know *which* POIs' stars to average. It reads that competitor
+  set from the shared DB, copying the mapping per the strangler pattern, never importing
+  monolith code.
+- **Scala Likert → Monolith (shared DB + clicked point)**: receives the clicked point as
+  host-set `lat`/`lng` (like the demographic Widget) and resolves it to a **comune
+  (region)** itself; reads POIs/areas by id/name only. Distinct from the demographic
+  Widget, which answers province-level — the Scala Likert is comune-grained.
+- **Scala Likert → external ratings provider (a departure)**: unlike every prior
+  read-side Widget, the Gradimento's raw material is **online review stars** sourced from
+  an external provider and kept in the Widget's **own cache** (background-refreshed) — the
+  first external-data dependency in the stack, recorded in the context's ADR.
+- **I Prezziari → Monolith (shared DB + clicked point)**: receives the clicked point as
+  host-set `lat`/`lng` and resolves it to a **comune (region)** itself, exactly like the
+  Scala Likert; it reads the monolith's geography by id/name only. It **does not consume
+  the Active Workshop** — two Beni in the same comune see the same figures, so geography,
+  not the Bene, is the axis. Only the OMI (Lista A) reacts to the click; the Campania
+  prezzario (Lista B) is region-fixed.
+- **I Prezziari → source publications (owns static snapshot tables)**: like the Scala
+  Likert it **owns tables**, but unlike it the data is **static, versioned, re-derivable**
+  reference material (OMI semestral, Campania prezzario annual), ingested **offline** and
+  read with **no runtime calls, no TTL and no refresh worker**. It is the first Widget to
+  own tables whose contents are published editions rather than a live/drifting signal —
+  recorded in the context's ADR. Latest edition only; Campania-only OMI.
 
 ## System-wide decisions
 

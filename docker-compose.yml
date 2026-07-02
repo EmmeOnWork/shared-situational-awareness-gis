@@ -26,6 +26,8 @@ services:
       NOTIFICATIONS_UPSTREAM: "http://notification-service:28004"
       ROUND_UPSTREAM: "http://round-service:28005"
       GEO_LAYERS_UPSTREAM: "http://geo-layers-service:28006"
+      LIKERT_UPSTREAM: "http://likert-service:28007"
+      PREZZARI_UPSTREAM: "http://prezzari-service:28008"
       MONOLITH_UPSTREAM: "http://ju-backend:8000"
       FRONTEND_UPSTREAM: "http://janus-dashboard-ui:3000"
     volumes:
@@ -40,6 +42,8 @@ services:
       - notification-service
       - round-service
       - geo-layers-service
+      - likert-service
+      - prezzari-service
       - ju-backend
       - janus-dashboard-ui
     networks:
@@ -302,6 +306,94 @@ services:
       - "/schema/round-schema.sql"
     volumes:
       - ./services/round-service/db/round-schema.sql:/schema/round-schema.sql:ro
+    networks:
+      - janus-net
+    restart: "no"
+
+  likert-service:
+    build:
+      context: ./services/likert-service
+      dockerfile: Dockerfile
+    # No published ports: reachable only through the gateway (ADR-0002).
+    environment:
+      # Shared DB (ADR-0001); lazily connected, so /health and /likert/widget.js
+      # answer even before it is reachable. The fallback below is the SAME local
+      # value as the siblings, so a no-.env first boot already works; a real .env
+      # (or the Supabase pooler URL) overrides it. The DB is used here only for the
+      # best-effort catalog self-registration — the Scala Likert's own ratings
+      # cache lands in a later slice.
+      DATABASE_URL: "${DATABASE_URL:-postgresql+psycopg://janus:CHANGE_ME@ju-postgres:5432/janus}"
+      # Dev JWT verification: the single data route /likert/gradimento verifies the
+      # monolith JWT, so this service needs the SAME verification key + algorithm
+      # the monolith signs with — identical to the sibling Widgets. The monolith
+      # issues real tokens in staging/prod; this HS256 key is local-only, not a
+      # secret.
+      JWT_ALGORITHM: "${JWT_ALGORITHM:-HS256}"
+      JWT_VERIFICATION_KEY: "${JWT_VERIFICATION_KEY:-CHANGE_ME}"
+    depends_on:
+      ju-postgres:
+        condition: service_healthy
+    networks:
+      - janus-net
+    restart: unless-stopped
+
+  prezzari-service:
+    build:
+      context: ./services/prezzari-service
+      dockerfile: Dockerfile
+    # No published ports: reachable only through the gateway (ADR-0002).
+    environment:
+      # Shared DB (ADR-0001); lazily connected, so /health and /prezzari/widget.js
+      # answer even before it is reachable. The fallback below is the SAME local
+      # value as the siblings, so a no-.env first boot already works; a real .env
+      # (or the Supabase pooler URL) overrides it. The DB is used here only for the
+      # best-effort catalog self-registration AND I Prezziari's own snapshot tables.
+      # The curated prezzario table (prezzario_voci) comes up with the
+      # prezzari-schema-init one-shot below, never from the app; it is populated by an
+      # offline ingest (no runtime egress, no refresh worker — prezzari ADR-0001).
+      # (OMI locazione lands in a later slice.)
+      DATABASE_URL: "${DATABASE_URL:-postgresql+psycopg://janus:CHANGE_ME@ju-postgres:5432/janus}"
+      # Dev JWT verification: the two data routes /prezzari/locazione + /lavori
+      # verify the monolith JWT, so this service needs the SAME verification key +
+      # algorithm the monolith signs with — identical to the sibling Widgets. The
+      # monolith issues real tokens in staging/prod; this HS256 key is local-only,
+      # not a secret.
+      JWT_ALGORITHM: "${JWT_ALGORITHM:-HS256}"
+      JWT_VERIFICATION_KEY: "${JWT_VERIFICATION_KEY:-CHANGE_ME}"
+    depends_on:
+      ju-postgres:
+        condition: service_healthy
+      prezzari-schema-init:
+        condition: service_completed_successfully
+    networks:
+      - janus-net
+    restart: unless-stopped
+
+  # One-shot: create I Prezziari's snapshot table(s) + grants before the service
+  # starts, so the app only ever issues DML (mirrors round/likert-schema-init).
+  prezzari-schema-init:
+    image: postgis/postgis:17-3.5
+    depends_on:
+      ju-postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-CHANGE_ME}
+    entrypoint: ["psql"]
+    command:
+      - "-h"
+      - "ju-postgres"
+      - "-U"
+      - "${POSTGRES_USER:-janus}"
+      - "-d"
+      - "${POSTGRES_DB:-janus}"
+      - "-v"
+      - "ON_ERROR_STOP=1"
+      - "-v"
+      - "service_role=${POSTGRES_USER:-janus}"
+      - "-f"
+      - "/schema/prezzari-schema.sql"
+    volumes:
+      - ./services/prezzari-service/db/prezzari-schema.sql:/schema/prezzari-schema.sql:ro
     networks:
       - janus-net
     restart: "no"

@@ -1,0 +1,9 @@
+fastapi[standard]
+uvicorn[standard]
+pydantic
+pydantic-settings
+sqlalchemy
+psycopg[binary]
+pyjwt
+cryptography
+httpx

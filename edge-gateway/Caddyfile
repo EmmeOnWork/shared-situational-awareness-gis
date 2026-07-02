@@ -64,6 +64,19 @@
 	# so the later WS slice needs no Caddyfile change.
 	reverse_proxy /rounds* {$ROUND_UPSTREAM}
 
+	# /likert → likert-service (Scala Likert: a read Widget that owns a small
+	# ratings cache and serves its single JWT-guarded data route + its unguarded
+	# bundle under /likert). Path is preserved and the upstream is injected
+	# per-environment.
+	reverse_proxy /likert* {$LIKERT_UPSTREAM}
+
+	# /prezzari → prezzari-service (I Prezziari: a read Widget serving two static
+	# reference price lists — the OMI locazione of the clicked comune and a curated
+	# Regione Campania prezzario slice — via its two JWT-guarded data routes + its
+	# unguarded bundle under /prezzari). Path is preserved and the upstream is
+	# injected per-environment.
+	reverse_proxy /prezzari* {$PREZZARI_UPSTREAM}
+
 	# Registering a Widget is THIS — one route line, claiming a fresh top-level
 	# prefix above the frontend catch-all. /geo-layers is the worked example: a new
 	# layers-style service. Strangling a route off the monolith is the same one-line
