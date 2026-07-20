@@ -190,4 +190,4 @@ the monolith, that one-time cost is the correct price.
 - [The strangler-fig strategy](strangler-fig.md) — the backend half of the same move.
 - [ADR-0001 — Shared database](../adr/0001-shared-database.md)
 - [ADR-0002 — Edge gateway, single front door](../adr/0002-edge-gateway-single-front-door.md)
-- [demographic-service](../../services/demographic-service/README.md) — the worked example.
+- [demographic-service](../services/demographic-service/README.md) — the worked example.

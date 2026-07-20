@@ -9,8 +9,8 @@ uncached competitor is simply omitted, so a wrong/absent match can never attach 
 0★ that would distort the pooled Gradimento.
 
 The data route reads **only** this cache — never a live Google call on a widget
-request (PRD; ADR-0001). The cache is filled by the background refresh worker (a
-later slice); here we read whatever it has seeded.
+request (PRD; ADR-0001). The cache is filled by the background refresh worker
+(``refresh_worker.py``); here we read whatever it has seeded.
 
 A deep module: the router sees ``fetch_ratings(poi_ids) -> {poi_id: PlaceRating}``;
 the join and the shared-DB session live entirely behind it.

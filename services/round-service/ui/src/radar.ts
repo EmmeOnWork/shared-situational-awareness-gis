@@ -9,7 +9,7 @@
  * vertices is the radar; "consenso totale" is the pooled overall as a percent.
  */
 
-export interface Branch {
+interface Branch {
     role: string;
     consensus: number;
 }

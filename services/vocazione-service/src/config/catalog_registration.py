@@ -1,15 +1,18 @@
 """Self-registration into the monolith's shared widget catalog.
 
-The dashboard "Add widget" menu is **DB-driven**: it lists
-``dashboards_config.widget_types`` from the shared database (ADR-0001). A Widget
-service makes itself appear in that menu by inserting **one** row here — its
-catalog entry — so **no monolith code is touched**. The monolith's own boot
+The widget catalog is **DB-driven**: it is
+``dashboards_config.widget_types`` from the shared database (ADR-0001), the
+source hand-curated dashboards reference (there is no in-app "Add widget"
+menu). A Widget service makes itself available to a curated dashboard by
+inserting **one** row here — its catalog entry — so **no monolith code is
+touched**. The monolith's own boot
 upserts only ITS seed rows (``ON CONFLICT (type) DO UPDATE`` over a fixed list),
 so this externally-owned row survives every monolith restart untouched.
 
 The catalog row points the generic ``RemoteWidget`` seam at this service's UI
-bundle via ``default_props.additionalConfig.remote = {src, tag}`` — the fragment
-the frontend's ``makeWidget`` copies into a freshly added widget.
+bundle via ``default_props.additionalConfig.remote = {src, tag}`` — the same
+fragment shape a dashboard's hand-curated ``additionalConfig`` carries for this
+widget type.
 
 **Best-effort by design.** Registration must never stop the service from booting:
 if the catalog table does not exist yet (monolith not booted) or the DB role may

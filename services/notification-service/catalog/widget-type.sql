@@ -4,7 +4,7 @@
 -- Realtime Notifier is still picked up by the dashboard's overlay seam.
 --
 -- Unlike the card Widgets, this row is flagged for the page-global overlay seam
--- (ADR-0006): `default_props.placement = "overlay"` tells the monolith's generic
+-- `default_props.placement = "overlay"` tells the monolith's generic
 -- <RemoteOverlay> loader to mount the bundle chromeless and page-global, not as a
 -- grid card. The renderer still routes on `remote`: {src} is the unguarded bundle
 -- route, {tag} the custom element <notification-overlay> defines. On conflict we

@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     database_url: str = ""
 
     # Best-effort self-registration into the monolith's shared widget catalog on
-    # startup, so this Widget appears in the dashboard "Add widget" menu without
+    # startup, so this Widget becomes available to hand-curated dashboards without
     # any monolith code change (the catalog is a shared-DB table — ADR-0001).
     # Turn off where the DB role may not write the monolith's schema; the SQL in
     # catalog/widget-type.sql can then be applied by an operator instead.

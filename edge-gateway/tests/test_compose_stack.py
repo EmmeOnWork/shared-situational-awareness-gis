@@ -64,22 +64,24 @@ def test_stack_brings_up_all_four_components_on_one_shared_network():
 
 
 def test_gateway_is_the_only_published_port():
-    """The gateway is the single front door: exactly one service publishes a port
-    to the host, and it is the gateway. Widget services and the monolith backend
-    stay unpublished, reachable only server-to-server — so a browser cannot hit
-    them directly (ADR-0002)."""
+    """The gateway is the single front door reachable from a browser/LAN: every
+    OTHER published port must be loopback-only (127.0.0.1), for local DB/dev
+    tooling (e.g. ju-postgres, for DBeaver/psql) rather than a second public
+    entry point. Widget services and the monolith backend stay fully
+    unpublished, reachable only server-to-server (ADR-0002)."""
     compose = compose_doc()
     gateway_name, _ = compose_gateway(compose)
 
-    published = {
-        name
-        for name, service in compose_services(compose).items()
-        if service.get("ports")
-    }
+    services = compose_services(compose)
+    published = {name for name, service in services.items() if service.get("ports")}
 
-    assert published == {gateway_name}, (
-        f"only the gateway ({gateway_name}) may publish ports; published={published}"
-    )
+    non_gateway_published = published - {gateway_name}
+    for name in non_gateway_published:
+        for port_mapping in services[name]["ports"]:
+            assert str(port_mapping).startswith("127.0.0.1:"), (
+                f"{name} publishes a non-loopback port ({port_mapping}); only the "
+                f"gateway ({gateway_name}) may be reachable beyond localhost"
+            )
 
 
 def _upstream_host(url):

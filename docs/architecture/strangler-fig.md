@@ -13,7 +13,7 @@ Before adding a new Widget service, before changing how requests are routed, or
 whenever you need to know *why* the gateway, the shared database, and the
 separate deployables exist as one coherent move rather than three unrelated
 choices. For the detailed decision records, follow the links to the ADRs; for
-operating the gateway, see its [README](../../edge-gateway/README.md).
+operating the gateway, see its [README](../edge-gateway/README.md).
 
 ## The pattern, applied here
 
@@ -28,8 +28,9 @@ the migration unit is a **route**:
   respects the same "don't touch me as I evolve" contract the monolith does.
 - A **Widget claims a fresh prefix.** A new service takes over a slice of
   behaviour by registering one explicit top-level prefix (`/demographics`,
-  future `/rounds`, `/notifications`, `/geo-layers`). Longest-prefix match wins;
-  the monolith catch-all is always last.
+  `/rounds`, `/notifications`, `/geo-layers`, and others — the current roster is
+  the [services context map](../services/README.md)). Longest-prefix match
+  wins; the monolith catch-all is always last.
 - **Strangling a route is a one-line, reversible move.** Re-pointing a single
   route-table entry shifts a path from the monolith to a new service — and back,
   if needed.
@@ -72,13 +73,13 @@ is the map of where to look, not a duplicate of their own docs.
 | **Route table** | [`edge-gateway/Caddyfile`](../../edge-gateway/Caddyfile) | The one file that answers "where does this request go?" — explicit Widget prefixes first, monolith catch-all last. Holds **no business logic**. |
 | **Per-environment config** | env substitution in the Caddyfile (`{$VAR}`) | Public hostname, upstream addresses, and the TLS toggle are injected per environment. Same file runs local/staging/prod; only values differ. The site address *is* the TLS toggle (port-only → HTTP; hostname → automatic HTTPS). |
 | **Compose orchestration** | [`docker-compose.yml`](../../docker-compose.yml) | Wires gateway + monolith backend + demographic-service + Next frontend on one network, with the **gateway as the only published port**. Closes review blockers **G1** and **G2**. |
-| **CORS removal** | [`services/demographic-service/`](../../services/demographic-service/README.md) | Widget services carry no CORS — they're never browser-facing. The standing pattern for every future Widget. |
+| **CORS removal** | [`demographic-service`](../services/demographic-service/README.md) | Widget services carry no CORS — they're never browser-facing. The standing pattern for every future Widget. |
 | **Frontend base URL** | `NEXT_PUBLIC_BACKEND_URL` → the gateway | Both framework calls (`/dashboards`, `/auth`) and Widget calls (`/demographics`) leave the browser as relative paths against the one origin. No frontend code changes. |
 
 The route table is the single **deep module**: a tiny interface (one origin + a
 prefix table) hiding routing, TLS posture, and CORS posture. Everything else is
 configuration exercised end-to-end by the gateway's
-[routing-contract tests](../../edge-gateway/README.md#routing-contract-tests).
+[routing-contract tests](../edge-gateway/README.md#routing-contract-tests).
 
 ## Adding a Widget
 
@@ -98,7 +99,7 @@ The prefix **must** be fresh. A new service may not reuse a monolith prefix
 service claims `/geo-layers`, not `/layers`. Realtime Widgets need nothing extra:
 Caddy carries WebSocket/SSE upgrades on every proxied route, so a realtime Widget
 registers its prefix like any other and holds its own connection behind the
-gateway (auth convention in the [gateway README](../../edge-gateway/README.md#realtime-auth-convention)).
+gateway (auth convention in the [gateway README](../edge-gateway/README.md#realtime-auth-convention)).
 
 ## Invariants that must hold
 
@@ -128,6 +129,6 @@ choosing a battle-tested proxy.
 
 - [ADR-0001 — Shared database](../adr/0001-shared-database.md)
 - [ADR-0002 — Edge gateway, single front door](../adr/0002-edge-gateway-single-front-door.md)
-- [Edge gateway README](../../edge-gateway/README.md) — operating the seam: tests, compose, reachability smoke, realtime.
+- [Edge gateway README](../edge-gateway/README.md) — operating the seam: tests, compose, reachability smoke, realtime.
 - [Architecture review](../architecture-review-strangler-fig-20260601.html) — blockers G1/G2/G3.
 - Back to the [project map](../../README.md).

@@ -7,10 +7,10 @@ comune?" with a single number, the **Gradimento**. Nobody rates a Vocazione dire
 so we use a **market-reception proxy**: the public online star-ratings of the POIs
 already in **direct competition** with that Vocazione in that comune — the exact
 **Competitor** set the Concorrenza map layer paints (the `vocazione_competitors` prefix
-map + the comune-scoped `regions → region_areas → areas → poi_area_lookup → pois` join).
-The widget **copies** that mapping into its own service (the strangler "copy" pattern,
-like `selection-bus.ts`) and reads the competitor POIs from the shared DB; it never
-imports monolith code nor calls a monolith endpoint.
+map + the comune-scoped `regions → region_areas → areas → poi_area_lookup → pois`
+join). The widget **copies** that mapping into its own service (the strangler "copy"
+pattern, like `selection-bus.ts`) and reads the competitor POIs from the shared DB; it
+never imports monolith code nor calls a monolith endpoint.
 
 The only star-ratings already in the stack are the monolith's MongoDB
 `POIS_F&D_reviews`, which are **food-and-drink only** — too narrow, since a Vocazione's

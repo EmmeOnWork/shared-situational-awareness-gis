@@ -1,7 +1,8 @@
 -- Manual catalog registration — the same row reuse-service upserts on boot
 -- (src/config/catalog_registration.py). Apply this where REGISTER_IN_CATALOG is
 -- off or the service's DB role may not write the monolith's schema, so the
--- Workshop Selector still appears in the dashboard "Add widget" menu as data.
+-- Workshop Selector still becomes available in the DB-driven widget catalog
+-- (there is no in-app "Add widget" menu — dashboards are hand-curated JSON).
 --
 -- The renderer routes on `remote`: {src} is the unguarded bundle route, {tag}
 -- the custom element <reuse-widget> defines. On conflict we refresh only the

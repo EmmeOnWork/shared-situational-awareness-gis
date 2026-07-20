@@ -13,8 +13,9 @@ class Settings(BaseSettings):
     (src/security) guards the single data route ``/likert/gradimento``.
 
     ``DATABASE_URL`` points at the **same Supabase** the monolith reads (ADR-0001).
-    The Scala Likert will own a small ratings cache (later slices); in this tracer
-    slice the DB is touched only for best-effort catalog self-registration on boot.
+    The Scala Likert owns a small ratings cache, kept current by a background
+    refresh worker; the DB is also touched for best-effort catalog
+    self-registration on boot.
     """
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -24,7 +25,7 @@ class Settings(BaseSettings):
     database_url: str = ""
 
     # Best-effort self-registration into the monolith's shared widget catalog on
-    # startup, so the Scala Likert appears in the dashboard "Add widget" menu
+    # startup, so the Scala Likert becomes available to hand-curated dashboards
     # without any monolith code change (the catalog is a shared-DB table —
     # ADR-0001). Turn off where the DB role may not write the monolith's schema;
     # the SQL in catalog/widget-type.sql can then be applied by an operator.

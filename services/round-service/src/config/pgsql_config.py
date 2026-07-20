@@ -5,9 +5,11 @@ a session that sets ``search_path`` to the shared ``public`` schema, and a
 context manager that rolls back on error and always closes. The engine is built
 on first use (not at import) so the app and its tests load without a database.
 
-The Round Manager is the first Widget to **own write state** (participants,
-rounds, votes, chat, outcomes — added in later slices). In this walking-skeleton
-slice the DB is touched only for best-effort catalog self-registration.
+The Round Manager is the first Widget to **own write state**: participants,
+rounds, votes and chat live in-memory per room (``src/rooms/room_manager.py``),
+and each closed Round's outcome is persisted to ``public.round_outcomes`` via
+``OutcomesRepository`` — the DB is not just touched for catalog
+self-registration.
 """
 
 from contextlib import contextmanager

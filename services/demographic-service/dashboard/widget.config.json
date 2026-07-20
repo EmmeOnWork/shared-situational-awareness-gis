@@ -1,5 +1,5 @@
 {
-  "_comment": "Config-as-code: a ready-made widget entry to drop straight into a dashboard document's `widgets` array (the monolith's dashboards store). You normally do NOT need this — the Widget self-registers into the catalog (see ../catalog/widget-type.sql) and is added from the dashboard 'Add widget' menu. This file documents the exact shape the catalog produces: the `additionalConfig.remote` pointer triggers the monolith's generic RemoteWidget seam, which loads `src` and mounts `tag`. Registering/placing this Widget is data, not monolith code. See ../../docs/architecture/widget-microservice-fullstack.md.",
+  "_comment": "Config-as-code: a ready-made widget entry to drop straight into a dashboard document's `widgets` array (the monolith's dashboards store) when hand-curating a dashboard. The Widget also self-registers into the catalog (see ../catalog/widget-type.sql), but there is no in-app 'Add widget' menu — a dashboard's `widgets` array is edited directly. This file documents the exact shape the catalog produces: the `additionalConfig.remote` pointer triggers the monolith's generic RemoteWidget seam, which loads `src` and mounts `tag`. Registering/placing this Widget is data, not monolith code. See ../../docs/architecture/widget-microservice-fullstack.md.",
   "key": "demographic",
   "type": "demographic",
   "widgetProps": {

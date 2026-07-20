@@ -1,8 +1,9 @@
 """I Prezziari data routes — the two reference price lists.
 
 The left list (Prezziario di Locazione) resolves the clicked point to a REAL comune
-(its Zone OMI rows stay stubbed until a later slice); the right list (Prezzario dei
-Lavori) reads the **real** curated snapshot through ``prezzario_repository``. Both
+and reads its Zone OMI rows through ``locazione_repository``; the right list
+(Prezzario dei Lavori) reads the **real** curated snapshot through
+``prezzario_repository``. Both
 routes are authentication-only. The left-column tests drive the route over a
 **mocked** resolver session (point-in-polygon without a live DB); the right list is
 driven over a **mocked** repository (its own behaviour is covered by

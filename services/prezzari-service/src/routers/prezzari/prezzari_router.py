@@ -14,11 +14,10 @@ from src.routers.prezzari.prezzario_repository import (
 # I Prezziari's two data routes. Mounted under ``/prezzari`` and guarded as a group
 # in src/app.py (authentication-only — any logged-in user may consult these public
 # reference lists; not a sensitive/Bene widget). The left list (Prezziario di
-# Locazione, OMI) resolves the clicked point to a REAL comune (this slice); its Zone
-# OMI rows stay stubbed until a later slice. The right list (Prezzario dei Lavori)
-# still returns a **hard-coded** payload in the PRD "API contract" SHAPE — the
-# contract the two-column widget renders against — until the curated Campania
-# prezzario slice lands.
+# Locazione, OMI) resolves the clicked point to a real comune and reads its Zone
+# OMI rows from the `omi_locazione` snapshot table. The right list (Prezzario dei
+# Lavori) reads the curated Campania prezzario from the `prezzario_voci` snapshot
+# table, in the PRD "API contract" shape the two-column widget renders against.
 prezzari_router = APIRouter(prefix="/prezzari")
 
 

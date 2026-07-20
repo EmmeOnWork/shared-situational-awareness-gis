@@ -12,7 +12,7 @@ from src.security.auth_dependencies import require_scopes
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Announce this Widget to the shared "Add widget" catalog (best-effort, never
+    # Announce this Widget to the shared widget catalog (best-effort, never
     # fatal). Runs on real boot; unit tests use a non-context-managed TestClient,
     # so this does not fire — and never touches a database — during tests.
     register_in_catalog()

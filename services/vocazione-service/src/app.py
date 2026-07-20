@@ -10,7 +10,7 @@ from src.config.catalog_registration import register_in_catalog
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # On real boot (best-effort, never fatal): announce this Widget to the shared
-    # "Add widget" catalog. Unit tests use a non-context-managed TestClient, so
+    # widget catalog. Unit tests use a non-context-managed TestClient, so
     # this does not fire — and never touches a database — during tests. There is
     # no registry to ensure and no data router to mount: this service owns no
     # tables (ADR-0001).

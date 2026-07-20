@@ -5,8 +5,9 @@ a session that sets ``search_path`` to the shared ``public`` schema, and a
 context manager that rolls back on error and always closes. The engine is built
 on first use (not at import) so the app and its tests load without a database.
 
-The Scala Likert will own a small ratings cache (later slices); in this tracer
-slice the DB is touched only for best-effort catalog self-registration.
+The Scala Likert owns a small ratings cache, kept current by a background
+refresh worker; the DB is also touched for best-effort catalog
+self-registration.
 """
 
 from contextlib import contextmanager

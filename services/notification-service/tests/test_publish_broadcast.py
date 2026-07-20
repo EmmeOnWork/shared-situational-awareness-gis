@@ -3,15 +3,14 @@
 A single server-side `POST /notifications/publish` must fan a self-describing
 Notification out to every connected WebSocket client. This exercises the whole
 slice through its public surfaces — the WS endpoint clients subscribe to and the
-publish ingress — with no knowledge of the Hub's internals. The token on the WS
-query string is accepted but NOT verified here (that is slice 3).
+publish ingress — with no knowledge of the Hub's internals.
 
 Toast *rendering* (colour by severity, auto-dismiss) is host-coupled glue and is
 verified manually per the task's acceptance criteria; this asserts the wire
 delivery the toast is built on.
 
-Since slice 3 the WS handshake verifies the JWT, so the subscribing client mints
-a valid token; this still exercises only the publish→broadcast→deliver wire.
+The WS handshake verifies the JWT, so the subscribing client mints a valid
+token; this still exercises only the publish→broadcast→deliver wire.
 """
 
 from tests.conftest import make_token

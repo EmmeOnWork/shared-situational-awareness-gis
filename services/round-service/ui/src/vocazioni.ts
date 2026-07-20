@@ -48,8 +48,3 @@ export const VOCAZIONI: readonly Vocazione[] = [
         label: "Presidio di Comunità per la Resilienza e la Protezione Civile",
     },
 ];
-
-/** Resolve a slug to its label, or the slug itself for an unknown/stale id. */
-export function vocazioneLabel(id: string): string {
-    return VOCAZIONI.find((v) => v.id === id)?.label ?? id;
-}

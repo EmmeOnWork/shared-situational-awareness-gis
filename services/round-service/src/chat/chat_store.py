@@ -5,8 +5,10 @@ A continuous, append-only deliberation log that spans *all* of a Bene's Rounds
 it preserves Vote independence by rejecting any message whose author has not yet
 cast their Vote in the current Round. ``read`` returns the **fully anonymised**
 shape — no author is ever surfaced — so the analysable record carries only the
-Round number, timestamp and body. No IO, no DB, no WebSocket; the room/persistence
-layers turn the emitted ``MessagePosted`` into live fan-out and rows.
+Round number, timestamp and body. No IO, no DB, no WebSocket — chat is
+in-memory only, unlike a closed Round's outcome (persisted separately via
+``OutcomesRepository``); the room layer is what turns the emitted
+``MessagePosted`` into live WS fan-out.
 """
 
 from dataclasses import dataclass, replace

@@ -1,17 +1,24 @@
-# geo-layers-service
+# Geo Layers
 
-External **data-source Widget** (strangler-fig, ADR-0001/0002): serves GeoJSON
-map layers to the monolith's GIS map **without touching monolith code**. It sits
-behind the edge gateway under `/geo-layers` (prefix already reserved in the
-Caddyfile) and reads the shared local postgres.
+**What it is** — `geo-layers-service`: an external **data-source Widget**
+(strangler-fig, ADR-0001/0002) that serves GeoJSON map layers to the
+monolith's GIS map, without touching monolith code, behind the edge gateway
+under `/geo-layers`. It has **no UI bundle of its own**: a map layer is added
+as *config data* on the monolith's existing JuMap widget
+(`additionalConfig.layers`), not as a draggable card — so there is no
+`widget.js`, no custom element, and no catalog row.
 
-It has **no UI bundle**: a map layer is added as *config data* on the JuMap widget
-(`additionalConfig.layers`), not as a draggable widget — so there is no
-`widget.js`, no custom element, and no catalog row. The JuMap renderer already
-draws polygons and colours them per feature (`colorCases`), so a new layer is just
-a route here + a config entry on the target map.
+**When to read it** — when you're adding a new map layer, or touching an
+existing one (fixed network, frana, idraulico, sismico).
 
-## Structure — one folder per layer
+## How it works
+
+The service sits behind the edge gateway under `/geo-layers` (prefix already
+reserved in the Caddyfile) and reads the shared local postgres. The JuMap
+renderer already draws polygons and colours them per feature (`colorCases`),
+so a new layer is just a route here + a config entry on the target map.
+
+### Structure — one folder per layer
 
 ```
 src/
@@ -25,11 +32,11 @@ src/
 ```
 
 Each `layers/<name>/schema.sql` is applied (empty, idempotent) by the compose
-`geo-layers-schema-init` one-shot on every bring-up; it loops over them, so adding
-a layer is: drop a folder with a `schema.sql` + `router.py`, register the router
-in `app.py`. The service never issues DDL (ADR-0001).
+`geo-layers-schema-init` one-shot on every bring-up; it loops over them, so
+adding a layer is: drop a folder with a `schema.sql` + `router.py`, register
+the router in `app.py`. The service never issues DDL (ADR-0001).
 
-## Layers
+### Layers
 
 | route | layer | shape | colour key |
 |---|---|---|---|
@@ -38,28 +45,31 @@ in `app.py`. The service never issues DDL (ADR-0001).
 | `GET /geo-layers/idraulico?region_id=9` | Rischio inondazione (ISPRA) | `FeatureCollection<MultiPolygon>` | `livello` (bassa/media/elevata) |
 | `GET /geo-layers/sismico?region_id=9` | Rischio sismico (per comune) | `FeatureCollection<MultiPolygon>` | `zona` (1/2/3/3S/4) |
 
-Every route is **scoped to one comune** via a required `region_id` (the clicked map
-area), and clips/filters its features to that comune's boundary — the SAME comune
-the monolith's POI/Confine layers follow, so a single map click drives all layers
-and nothing loads the whole region up front. The configs opt in with
-`reactToFilters.area` + a default `region_id` (see the templates below).
+Every route is **scoped to one comune** via a required `region_id` (the clicked
+map area), and clips/filters its features to that comune's boundary — the SAME
+comune the monolith's POI/Confine layers follow, so a single map click drives
+all layers and nothing loads the whole region up front. The configs opt in
+with `reactToFilters.area` + a default `region_id` (see the templates below).
 
-All data routes return `{ "geojson": <FeatureCollection> }` and are **auth-only**
-(any logged-in monolith user); the browser's JWT is forwarded by the gateway. No
-extra scope to grant in the monolith. The tables come up **empty** with the
-compose schema-init — load each layer's data with the one-off steps below.
+All data routes return `{ "geojson": <FeatureCollection> }` and are
+**auth-only** (any logged-in monolith user); the browser's JWT is forwarded by
+the gateway. No extra scope to grant in the monolith. The tables come up
+**empty** with the compose schema-init — load each layer's data with the
+one-off steps below.
 
-## Loading the data (one-off per database)
+## Running it
+
+### Loading the data (one-off per database)
 
 The risk datasets are national and large, so frana/idraulico are clipped to
-Campania and reprojected to WGS84 (EPSG:4326) at load with `ogr2ogr` (GDAL). The
-**route** then does the size reduction: it `ST_SimplifyPreserveTopology`s and
-**dissolves to one MultiPolygon per class/level** (a few SVG paths instead of tens
-of thousands) — so the heavy lifting is server-side, not in the load. Load from
-the **original `.gdb` / `.shp`** (binary, read efficiently) — not the multi-GB
-derived GeoJSONs, which GDAL loads whole into memory. The commands use a throwaway
-GDAL container on the stack network (no image changes); run them from the repo
-root with the stack up.
+Campania and reprojected to WGS84 (EPSG:4326) at load with `ogr2ogr` (GDAL).
+The **route** then does the size reduction: it `ST_SimplifyPreserveTopology`s
+and **dissolves to one MultiPolygon per class/level** (a few SVG paths instead
+of tens of thousands) — so the heavy lifting is server-side, not in the load.
+Load from the **original `.gdb` / `.shp`** (binary, read efficiently) — not the
+multi-GB derived GeoJSONs, which GDAL loads whole into memory. The commands
+use a throwaway GDAL container on the stack network (no image changes); run
+them from the repo root with the stack up.
 
 > Note: ogr2ogr's `-simplify` tolerance is in the **source** SRS units (metres
 > here, not degrees), so it is omitted — the route simplifies in 4326 degrees
@@ -68,7 +78,7 @@ root with the stack up.
 - `janus-stack_janus-net` is `<compose-project>_janus-net` — check `docker network ls` if your project name differs.
 - On Windows Git Bash, prefix with `MSYS_NO_PATHCONV=1` and use an absolute `-v` source (e.g. `-v "C:/.../data/Dati_Rischio:/data:ro"`) so the mount path isn't mangled.
 
-### Rete fissa < 1 Gb (civics CSV → markers)
+#### Rete fissa < 1 Gb (civics CSV → markers)
 
 ```sh
 docker compose cp "data/Copertura_Digitale/Rete_Fissa_Sotto_1Gb/Allegato A_mapp707K.csv" \
@@ -77,10 +87,10 @@ docker compose exec geo-layers-service \
     python -m src.layers.fixed_network.load /tmp/civics.csv --region CAMPANIA
 ```
 
-### Frana (`Frana.gdb`; reproject 32632→4326, clip + area-filter Campania)
+#### Frana (`Frana.gdb`; reproject 32632→4326, clip + area-filter Campania)
 
-`-spat` is the Campania bbox **in the source SRS** (EPSG:32632) — `-spat_srs` is
-not allowed with `-sql`. Recompute it for another area with
+`-spat` is the Campania bbox **in the source SRS** (EPSG:32632) — `-spat_srs`
+is not allowed with `-sql`. Recompute it for another area with
 `gdaltransform -s_srs EPSG:4326 -t_srs EPSG:32632`.
 
 ```sh
@@ -93,10 +103,10 @@ docker run --rm --network janus-stack_janus-net -v "$(pwd)/data/Dati_Rischio:/da
     -t_srs EPSG:4326 -spat 883000 4415000 1091000 4629000
 ```
 
-### Idraulico (`OLD/*.shp`; reproject 3035→4326, clip Campania)
+#### Idraulico (`OLD/*.shp`; reproject 3035→4326, clip Campania)
 
-One run per scenario shapefile; the `scenario` field tells the route the level.
-`-spat` is the Campania bbox in the source SRS (EPSG:3035).
+One run per scenario shapefile; the `scenario` field tells the route the
+level. `-spat` is the Campania bbox in the source SRS (EPSG:3035).
 
 ```sh
 for shp in \
@@ -113,13 +123,14 @@ for shp in \
 done
 ```
 
-### Sismico (per-comune classification, coloured on the public.areas boundary)
+#### Sismico (per-comune classification, coloured on the public.areas boundary)
 
 The CSV has **no geometry**: the `/sismico` route draws the clicked comune's
-boundary from `public.areas` (`area_type_id = 3`) and colours it by `ZONA_SISMICA`,
-joined on the comune ISTAT code (`areas.metadata->>'ref:ISTAT'`). So only this CSV is
-loaded — **no separate comuni-boundary import** — and the layer renders for exactly
-the comuni `public.areas` has (the same ones POI/Confine cover).
+boundary from `public.areas` (`area_type_id = 3`) and colours it by
+`ZONA_SISMICA`, joined on the comune ISTAT code
+(`areas.metadata->>'ref:ISTAT'`). So only this CSV is loaded — **no separate
+comuni-boundary import** — and the layer renders for exactly the comuni
+`public.areas` has (the same ones POI/Confine cover).
 
 ```sh
 docker compose cp data/Dati_Rischio/Sismico/classificazione_rischio_sismico_clean.csv \
@@ -128,12 +139,13 @@ docker compose exec geo-layers-service \
     python -m src.layers.sismico.load /tmp/sismico.csv
 ```
 
-> Reloading a layer: `TRUNCATE <table>;` first (the ogr2ogr step uses `-append`).
-> frana/idraulico clip to one comune then simplify at `0.0003` (~33 m, near-lossless
-> at that zoom); tune `ST_SimplifyPreserveTopology(…, 0.0003)` in the layer's
-> `router.py` if needed (bigger = lighter/coarser).
+> Reloading a layer: `TRUNCATE <table>;` first (the ogr2ogr step uses
+> `-append`). frana/idraulico clip to one comune then simplify at `0.0003`
+> (~33 m, near-lossless at that zoom); tune
+> `ST_SimplifyPreserveTopology(…, 0.0003)` in the layer's `router.py` if needed
+> (bigger = lighter/coarser).
 
-## Map layer config (drop into the target map's `additionalConfig.layers`)
+### Map layer config (drop into the target map's `additionalConfig.layers`)
 
 ```json
 {
@@ -215,3 +227,9 @@ docker compose exec geo-layers-service \
   "defaultVisible": false
 }
 ```
+
+## Links out
+
+- [Strangler-fig strategy](../../architecture/strangler-fig.md)
+- [Full-stack Widget microservices](../../architecture/widget-microservice-fullstack.md)
+- [Services overview](../README.md)

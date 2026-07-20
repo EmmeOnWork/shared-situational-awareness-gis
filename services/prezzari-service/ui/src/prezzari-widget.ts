@@ -304,11 +304,6 @@ class PrezzariWidget extends HTMLElement {
         this.setColumn(col, pub, body);
     }
 
-    private paintRight(pub: string, body: string) {
-        const col = this.root.getElementById("right");
-        if (col) this.setColumn(col, pub, body);
-    }
-
     private setColumn(col: HTMLElement, pub: string, body: string) {
         const pubEl = col.querySelector(".pub");
         if (pubEl) pubEl.textContent = pub;

@@ -65,7 +65,7 @@ def widget_bundle():
 
 
 # The realtime surfaces: the WS endpoint clients subscribe to and the publish
-# ingress that fans a Notification to all of them. Deliberately UNGUARDED in this
-# slice — the WS token is not yet verified (slice 3) and authorisation on the
-# publish ingress is a separate, deferred decision (CONTEXT.md).
+# ingress that fans a Notification to all of them. The WS handshake verifies the
+# monolith JWT (src/notifier/ws_auth.py); authorisation on the publish ingress
+# remains a separate, deferred decision (CONTEXT.md).
 app.include_router(notifications_router)
