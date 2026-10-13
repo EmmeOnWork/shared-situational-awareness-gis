@@ -1,5 +1,12 @@
 # Janus stack — strangler-fig workspace
 
+> **Public copy of my M.Sc. thesis workspace.** The Janus monolith belongs to the
+> KnowMIS research lab of the University of Salerno and is not included: see
+> [`monolith/README.md`](monolith/README.md). The source datasets and all local
+> passwords and keys were left out as well, so the stack does not boot from this
+> repository alone. The services, the edge gateway, their tests and the docs are
+> all here.
+
 This repository grows new dashboard **Widget** services *around* the Janus
 monolith without ever editing the monolith's code. Each Widget strangles one
 slice of the monolith's routes — and, where it ships its own UI, one slice of
@@ -16,11 +23,11 @@ place to look.
 
 | Folder | What lives here |
 | ------ | --------------- |
-| [`monolith/`](monolith/) | The Janus backend + Next frontend, **untouched** (its code, not its data). The strangler fig grows around this. |
+| [`monolith/`](monolith/) | The Janus backend + Next frontend, **untouched** (its code, not its data). The strangler fig grows around this. *Not included in this public copy — the folder holds only a note.* |
 | [`services/`](services/) | The Widget deployables — code only (data + UI + tests). What each one does lives in [`docs/services/`](docs/services/README.md). |
 | [`edge-gateway/`](edge-gateway/) | The single same-origin front door (Caddy) — code + Caddyfile only. How it routes lives in [`docs/edge-gateway/`](docs/edge-gateway/README.md). |
 | [`docs/`](docs/) | Every doc in the workspace: architecture, the services context map, decision records, the gateway. |
-| [`data/`](data/) | Source CSVs and the Postgres dump used to seed the shared database locally. |
+| `data/` | Source CSVs and the Postgres dump used to seed the shared database locally. *Not included in this public copy.* |
 | `docker-compose.yml` | Brings the whole stack up on one network with the gateway as the only published port. |
 
 ## Start here
